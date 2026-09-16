@@ -1,0 +1,6 @@
+{
+  "name": "ח. סבן · לוח סידור והפצה חי",
+  "description": "לוח שידור חי להזמנות, העמסות ונהגים של ח. סבן עם סנכרון גיליון וממשק PWA לליקוט ומלאי.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
