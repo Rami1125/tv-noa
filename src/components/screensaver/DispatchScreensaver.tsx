@@ -165,46 +165,41 @@ export function DispatchScreensaver() {
   const { settings: adminSettings, activeSlides = [] } = useAdminControl();
   const [showAdminModal, setShowAdminModal] = useState(false);
 
-  // שמירת מצב הסטטוסים הקודם לאיתור שינויים בזמן אמת
-  const prevStatusesRef = useRef<Map<string, string>>(new Map());
-
-  // יציאה מיידית משומר המסך ברגע שסטטוס הזמנה משתנה
-  useEffect(() => {
-    if (!published || published.length === 0) return;
-
-    let hasStatusChanged = false;
-    const currentMap = new Map<string, string>();
-
-    for (const order of published) {
-      const id = String(order.orderId || order.id || "");
-      const status = String(order.status || "");
-      currentMap.set(id, status);
-
-      if (prevStatusesRef.current.has(id)) {
-        const prevStatus = prevStatusesRef.current.get(id);
-        if (prevStatus && prevStatus !== status) {
-          hasStatusChanged = true;
-        }
-      }
-    }
-
-    prevStatusesRef.current = currentMap;
-
-    // אם זוהה שינוי סטטוס והשומר מסך פעיל - מכבים אותו מיד
-    if (hasStatusChanged && isScreensaverActive) {
-      setScreensaverActive(false);
-    }
-  }, [published, isScreensaverActive, setScreensaverActive]);
-
-  // אם שומר המסך לא פעיל, לא מציגים דבר והלוח נשאר גלוי
-  if (!isScreensaverActive) {
-    return null;
-  }
-
   // Initialize active tab from first active slide if possible
   const [activeTab, setActiveTab] = useState<ScreensaverMode>(() => {
     return (activeSlides?.[0]?.id as ScreensaverMode) || "product_slide";
   });
+  const [selectedVideoTheme, setSelectedVideoTheme] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [currentTime, setCurrentTime] = useState<string>("");
+  const [currentDate, setCurrentDate] = useState<string>("");
+  const [isCyclePaused, setIsCyclePaused] = useState(false);
+  const [cycleProgress, setCycleProgress] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Live clock
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString("he-IL", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      );
+      setCurrentDate(
+        now.toLocaleDateString("he-IL", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        }),
+      );
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Compute live analytics and driver ETAs
   const analytics = useMemo(() => computeProductAnalytics(published), [published]);
