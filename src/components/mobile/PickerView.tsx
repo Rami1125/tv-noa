@@ -167,6 +167,31 @@ function LiveKpiBanner({ orders = [] }: { orders: Order[] }) {
   );
 }
 
+const DISMISSED_SUMSUM_ALERTS_KEY = "saban_dismissed_sumsum_alerts";
+
+function getDismissedSumsumAlerts(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(DISMISSED_SUMSUM_ALERTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    /* ignore storage error */
+  }
+  return new Set();
+}
+
+function saveDismissedSumsumAlerts(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DISMISSED_SUMSUM_ALERTS_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    /* ignore storage error */
+  }
+}
+
 export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   const context = useDispatchBoard();
   const published = context?.published ?? [];
@@ -217,11 +242,37 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     sumsumSmallPallets: 0,
   });
 
+  const [dismissedAlertOrderIds, setDismissedAlertOrderIds] = useState<Set<string>>(() =>
+    getDismissedSumsumAlerts(),
+  );
+
   const [activeAlert, setActiveAlert] = useState<{
     orderId: string;
     client: string;
     sumsumCount: number;
   } | null>(null);
+
+  const handleDismissAlert = useCallback((orderId: string) => {
+    setDismissedAlertOrderIds((prev) => {
+      const next = new Set(prev);
+      next.add(String(orderId));
+      saveDismissedSumsumAlerts(next);
+      return next;
+    });
+    setActiveAlert(null);
+  }, []);
+
+  const handleAddBalesToDraft = useCallback(
+    (orderId: string, count: number) => {
+      setTruckDraft((prev) => ({
+        ...prev,
+        sumsumBags: prev.sumsumBags + count,
+      }));
+      handleDismissAlert(orderId);
+      setActiveTab("truck_builder");
+    },
+    [handleDismissAlert],
+  );
 
   const [isMuted, setIsMuted] = useState(false);
   const { isInstallable, promptInstall, isIOS } = usePwaInstall();
@@ -276,23 +327,29 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   }, [published]);
 
   useEffect(() => {
-    safePublished.forEach((order) => {
-      if (!warehouseMatchesProfile(order.warehouse, selectedProfile)) return;
+    if (activeAlert) return;
+
+    for (const order of safePublished) {
+      if (!warehouseMatchesProfile(order.warehouse, selectedProfile)) continue;
+      const orderId = String(order.orderId || "");
+      if (!orderId || dismissedAlertOrderIds.has(orderId)) continue;
+
       const rawSummary =
         (order.items || []).map((i) => i.name).join(" ") + " " + (order.customerName || "");
       const match = rawSummary.match(/([0-9]+)\s*(?:בלות|בלה|שק גדול)?\s*סומסום/);
       if (match) {
         const count = parseInt(match[1], 10);
-        if (count >= 10 && (!activeAlert || activeAlert.orderId !== order.orderId)) {
+        if (count >= 10) {
           setActiveAlert({
-            orderId: order.orderId,
+            orderId,
             client: order.customerName || "לקוח",
             sumsumCount: count,
           });
+          break;
         }
       }
-    });
-  }, [safePublished, selectedProfile, activeAlert]);
+    }
+  }, [safePublished, selectedProfile, activeAlert, dismissedAlertOrderIds]);
 
   const filteredOrders = useMemo(() => {
     return safePublished.filter((order) => {
@@ -530,55 +587,60 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
         {/* Popup 10 בלות סומסום */}
         <AnimatePresence>
           {activeAlert && (
-            <motion.div
-              initial={{ opacity: 0, y: -40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -40 }}
-              className="fixed top-20 inset-x-4 z-50 rounded-3xl border-2 border-rose-500 bg-rose-950/95 p-4 text-white shadow-2xl backdrop-blur-xl"
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto"
+              onClick={() => handleDismissAlert(activeAlert.orderId)}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <AlertTriangle className="size-6 text-rose-400 animate-bounce shrink-0" />
-                  <div>
-                    <h3 className="text-sm font-black text-rose-200 leading-snug">
-                      התראת עומס משיכה — 10 בלות סומסום!
-                    </h3>
-                    <p className="text-[11px] font-semibold text-white/90 mt-0.5">
-                      הזמנה #{activeAlert.orderId} עבור {activeAlert.client} כוללת{" "}
-                      {activeAlert.sumsumCount} בלות סומסום.
-                    </p>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: -10 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-3xl border-2 border-rose-500 bg-rose-950 p-5 text-white shadow-2xl"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="size-7 text-rose-400 animate-bounce shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-black text-rose-200 leading-snug">
+                        התראת עומס משיכה — 10 בלות סומסום!
+                      </h3>
+                      <p className="text-xs font-semibold text-white/90 mt-1">
+                        הזמנה #{activeAlert.orderId} עבור {activeAlert.client} כוללת{" "}
+                        {activeAlert.sumsumCount} בלות סומסום.
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissAlert(activeAlert.orderId)}
+                    className="grid size-8 place-items-center rounded-xl bg-white/10 text-white/80 hover:bg-white/20 active:scale-90 transition"
+                    aria-label="סגור התראה"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setActiveAlert(null)}
-                  className="grid size-7 place-items-center rounded-lg bg-white/10 text-white/80"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
 
-              <div className="flex items-center gap-2 mt-3 pt-2 border-t border-rose-500/40">
-                <button
-                  onClick={() => {
-                    setTruckDraft((prev) => ({
-                      ...prev,
-                      sumsumBags: prev.sumsumBags + activeAlert.sumsumCount,
-                    }));
-                    setActiveAlert(null);
-                    setActiveTab("truck_builder");
-                  }}
-                  className="flex-1 h-9 rounded-xl bg-white text-slate-950 font-black text-xs shadow-md active:scale-95"
-                >
-                  הוסף {activeAlert.sumsumCount} בלות למשאית בית הטיט
-                </button>
-                <button
-                  onClick={() => setActiveAlert(null)}
-                  className="h-9 px-3 rounded-xl bg-white/15 text-white font-bold text-xs"
-                >
-                  סגור
-                </button>
-              </div>
-            </motion.div>
+                <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-rose-500/40">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleAddBalesToDraft(activeAlert.orderId, activeAlert.sumsumCount)
+                    }
+                    className="w-full h-11 rounded-xl bg-white text-slate-950 font-black text-xs shadow-lg active:scale-95 transition"
+                  >
+                    הוסף {activeAlert.sumsumCount} בלות למשאית בית הטיט
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissAlert(activeAlert.orderId)}
+                    className="w-full h-10 rounded-xl bg-white/15 text-white font-bold text-xs hover:bg-white/20 active:scale-95 transition"
+                  >
+                    התעלם וסגור
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 

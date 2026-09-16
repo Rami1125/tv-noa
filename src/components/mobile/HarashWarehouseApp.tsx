@@ -39,6 +39,31 @@ interface HarashWarehouseAppProps {
 
 const BEIT_HATIT_PHONE = "972500000000";
 
+const DISMISSED_SUMSUM_ALERTS_KEY = "saban_dismissed_sumsum_alerts";
+
+function getDismissedSumsumAlerts(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(DISMISSED_SUMSUM_ALERTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+    }
+  } catch {
+    /* ignore storage error */
+  }
+  return new Set();
+}
+
+function saveDismissedSumsumAlerts(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DISMISSED_SUMSUM_ALERTS_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    /* ignore storage error */
+  }
+}
+
 interface TruckDraft {
   sandBags: number;
   sumsumBags: number;
@@ -129,8 +154,10 @@ export function HarashWarehouseApp({
     sumsumSmallPallets: 0,
   });
 
-  // מזהי הזמנות שכבר טופלו או נסגרו - מונע לולאת תקיעה
-  const [dismissedAlertOrderIds, setDismissedAlertOrderIds] = useState<Set<string>>(new Set());
+  // מזהי הזמנות שכבר טופלו או נסגרו - שמור בזיכרון מקומי ומונע לולאת תקיעה
+  const [dismissedAlertOrderIds, setDismissedAlertOrderIds] = useState<Set<string>>(() =>
+    getDismissedSumsumAlerts(),
+  );
   const [activeAlert, setActiveAlert] = useState<{
     orderId: string;
     client: string;
@@ -165,7 +192,12 @@ export function HarashWarehouseApp({
   }, [harashOrders, dismissedAlertOrderIds, activeAlert]);
 
   const handleDismissAlert = (orderId: string) => {
-    setDismissedAlertOrderIds((prev) => new Set(prev).add(orderId));
+    setDismissedAlertOrderIds((prev) => {
+      const next = new Set(prev);
+      next.add(orderId);
+      saveDismissedSumsumAlerts(next);
+      return next;
+    });
     setActiveAlert(null);
   };
 
@@ -174,8 +206,7 @@ export function HarashWarehouseApp({
       ...prev,
       sumsumBags: prev.sumsumBags + count,
     }));
-    setDismissedAlertOrderIds((prev) => new Set(prev).add(orderId));
-    setActiveAlert(null);
+    handleDismissAlert(orderId);
     setActiveTab("truck_builder");
   };
 
@@ -283,11 +314,15 @@ export function HarashWarehouseApp({
       {/* Popup התרעה דחופה ל-10 בלות סומסום - עם מנגנון שחרור מלא */}
       <AnimatePresence>
         {activeAlert && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto"
+            onClick={() => handleDismissAlert(activeAlert.orderId)}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-sm rounded-3xl border-2 border-rose-500 bg-rose-950 p-5 text-white shadow-2xl"
             >
               <div className="flex items-start justify-between gap-3">
