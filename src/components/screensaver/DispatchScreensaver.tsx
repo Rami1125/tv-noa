@@ -159,6 +159,7 @@ export function DispatchScreensaver() {
     isGeneratingAI,
     alerts,
     syncNow,
+    recentlyChangedOrderIds,
   } = useDispatchBoard();
 
   const { settings: adminSettings, activeSlides = [] } = useAdminControl();
@@ -295,6 +296,55 @@ export function DispatchScreensaver() {
     }
   }, [isVideoPlaying, activeTab, selectedVideoTheme]);
 
+  // Listen for order status changes in published board: close screensaver immediately
+  const prevOrderStatusesRef = useRef<Map<string, string>>(new Map());
+  const isInitialStatusCheck = useRef(true);
+
+  useEffect(() => {
+    if (isInitialStatusCheck.current) {
+      isInitialStatusCheck.current = false;
+      published.forEach((o) => {
+        prevOrderStatusesRef.current.set(o.orderId, o.status);
+      });
+      return;
+    }
+
+    let statusChanged = false;
+    for (const order of published) {
+      const prevStatus = prevOrderStatusesRef.current.get(order.orderId);
+      if (prevStatus !== undefined && prevStatus !== order.status) {
+        statusChanged = true;
+        break;
+      }
+    }
+
+    // Refresh the status snapshot
+    prevOrderStatusesRef.current.clear();
+    published.forEach((o) => {
+      prevOrderStatusesRef.current.set(o.orderId, o.status);
+    });
+
+    if (statusChanged && isScreensaverActive) {
+      setScreensaverActive(false);
+    }
+  }, [published, isScreensaverActive, setScreensaverActive]);
+
+  // Listen for recentlyChangedOrderIds: close screensaver immediately when an order is updated
+  const prevRecentlyChangedCount = useRef(0);
+  useEffect(() => {
+    const currentCount = Array.isArray(recentlyChangedOrderIds)
+      ? recentlyChangedOrderIds.length
+      : Object.keys(recentlyChangedOrderIds || {}).length;
+
+    if (currentCount > 0 && currentCount !== prevRecentlyChangedCount.current) {
+      if (isScreensaverActive) {
+        setScreensaverActive(false);
+      }
+    }
+    prevRecentlyChangedCount.current = currentCount;
+  }, [recentlyChangedOrderIds, isScreensaverActive, setScreensaverActive]);
+
+  // If screensaver is inactive, return null immediately to reveal the main dispatch board
   if (!isScreensaverActive) return null;
 
   const urgentAlertsCount = alerts.filter((a) => a.level === "critical").length;

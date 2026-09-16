@@ -31,6 +31,7 @@ export interface Warehouse {
 }
 
 export interface Order {
+  id?: string;
   orderId: string;
   customerNumber?: string;
   customerName: string;
@@ -121,5 +122,5 @@ export interface DispatchState {
   syncStatus: "idle" | "syncing" | "ok" | "error";
   syncError: string | null;
   isDirty: boolean;
-  recentlyChangedOrderIds: Record<string, number>;
+  recentlyChangedOrderIds: string[] & Record<string, number>;
 }

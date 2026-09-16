@@ -251,7 +251,7 @@ interface DispatchContextValue extends DispatchState {
   focusOrder: Order | null;
   counts: Record<OrderStatus, number>;
   currentTime: Date;
-  recentlyChangedOrderIds: Record<string, number>;
+  recentlyChangedOrderIds: string[] & Record<string, number>;
   recordOrderChange: (orderId: string) => void;
 
   /* automated real-time inventory */
@@ -341,24 +341,6 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
-  const [recentlyChangedOrderIds, setRecentlyChangedOrderIds] = useState<Record<string, number>>(
-    {},
-  );
-
-  const recordOrderChange = useCallback((orderId: string) => {
-    setRecentlyChangedOrderIds((prev) => ({
-      ...prev,
-      [orderId]: Date.now(),
-    }));
-  }, []);
-
-  useEffect(() => {
-    // Pre-seed demo highlight safely after mount
-    setRecentlyChangedOrderIds({
-      "6215440": Date.now() - 8000,
-    });
-  }, []);
-
   /* ---------------- Screensaver State ---------------- */
   const [isScreensaverActive, setScreensaverActive] = useState(false);
   const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings>(
@@ -366,6 +348,63 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   );
   const [idleSecondsCount, setIdleSecondsCount] = useState(0);
   const lastInteractionTime = useRef(Date.now());
+  const idleSecondsRef = useRef(0);
+
+  /* ---------------- Real-time Highlight & Change Tracking ---------------- */
+  const [recentlyChangedMap, setRecentlyChangedMap] = useState<Record<string, number>>({});
+  const clearTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const recordOrderChange = useCallback((orderId: string) => {
+    if (!orderId) return;
+    const cleanId = String(orderId);
+
+    // Cancel existing 8-second timer for this order if already running
+    if (clearTimersRef.current[cleanId]) {
+      clearTimeout(clearTimersRef.current[cleanId]);
+    }
+
+    const now = Date.now();
+    setRecentlyChangedMap((prev) => ({
+      ...prev,
+      [cleanId]: now,
+    }));
+
+    // Dismiss screensaver immediately on order status update
+    setScreensaverActive(false);
+
+    // Reset idle inactivity timer immediately
+    idleSecondsRef.current = 0;
+    lastInteractionTime.current = Date.now();
+    setIdleSecondsCount(0);
+
+    // Schedule cleanup after 8 seconds
+    clearTimersRef.current[cleanId] = setTimeout(() => {
+      setRecentlyChangedMap((prev) => {
+        if (!(cleanId in prev)) return prev;
+        const next = { ...prev };
+        delete next[cleanId];
+        return next;
+      });
+      delete clearTimersRef.current[cleanId];
+    }, 8000);
+  }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    const activeTimers = clearTimersRef.current;
+    return () => {
+      Object.values(activeTimers).forEach((t) => clearTimeout(t));
+    };
+  }, []);
+
+  const recentlyChangedOrderIds = useMemo(() => {
+    const ids = Object.keys(recentlyChangedMap);
+    const arr = [...ids] as string[] & Record<string, number>;
+    for (const id of ids) {
+      arr[id] = recentlyChangedMap[id];
+    }
+    return arr;
+  }, [recentlyChangedMap]);
 
   /* ---------------- AI Model & Schedule State ---------------- */
   const [aiTraining, setAiTraining] = useState<AITrainingSettings>(DEFAULT_AI_TRAINING);
@@ -1421,6 +1460,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onUserAction = () => {
       lastInteractionTime.current = Date.now();
+      idleSecondsRef.current = 0;
     };
 
     window.addEventListener("mousemove", onUserAction);
@@ -1443,6 +1483,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
     const interval = setInterval(() => {
       const idleSec = Math.floor((Date.now() - lastInteractionTime.current) / 1000);
+      idleSecondsRef.current = idleSec;
       setIdleSecondsCount(idleSec);
 
       const isIdleExceeded =
@@ -1474,6 +1515,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         if (isScreensaverActive) {
           setScreensaverActive(false);
           lastInteractionTime.current = Date.now();
+          idleSecondsRef.current = 0;
+          setIdleSecondsCount(0);
         } else {
           setStudioOpen(false);
         }

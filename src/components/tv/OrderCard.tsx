@@ -13,7 +13,7 @@ import {
   Warehouse,
   Zap,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -25,10 +25,21 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
   const { currentTime, recentlyChangedOrderIds, quickUpdateStatus } = useDispatchBoard();
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const cardRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const isHighlighted = Boolean(
+    isMounted && recentlyChangedOrderIds.includes(order.orderId || order.id || ""),
+  );
+
+  useEffect(() => {
+    if (isHighlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [isHighlighted]);
 
   const approved = order.items.filter((i) => i.isApproved).length;
   const total = order.items.length;
@@ -97,31 +108,34 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
           ? "changed"
           : null;
 
-  const pulseClass = !isMounted
-    ? order.status === "בהעמסה"
-      ? "border-accent/60 ring-2 ring-accent/30 shadow-sm"
-      : "border-border/80 shadow-sm"
-    : primaryAlert === "delayed"
-      ? "animate-gentle-pulse-rose border-rose-500/70 shadow-[0_0_20px_-2px_rgba(244,63,94,0.32)] ring-1 ring-rose-500/40"
-      : primaryAlert === "approaching"
-        ? "animate-gentle-pulse-amber border-amber-500/70 shadow-[0_0_18px_-2px_rgba(245,158,11,0.28)] ring-1 ring-amber-500/40"
-        : primaryAlert === "changed"
-          ? "animate-gentle-pulse-blue border-sky-500/70 shadow-[0_0_18px_-2px_rgba(56,189,248,0.3)] ring-1 ring-sky-500/40"
-          : order.status === "בהעמסה"
-            ? "border-accent/60 ring-2 ring-accent/30 shadow-sm"
-            : "border-border/80 shadow-sm";
+  const pulseClass = isHighlighted
+    ? "ring-4 ring-amber-400 border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.6)] animate-pulse z-20"
+    : !isMounted
+      ? order.status === "בהעמסה"
+        ? "border-accent/60 ring-2 ring-accent/30 shadow-sm"
+        : "border-border/80 shadow-sm"
+      : primaryAlert === "delayed"
+        ? "animate-gentle-pulse-rose border-rose-500/70 shadow-[0_0_20px_-2px_rgba(244,63,94,0.32)] ring-1 ring-rose-500/40"
+        : primaryAlert === "approaching"
+          ? "animate-gentle-pulse-amber border-amber-500/70 shadow-[0_0_18px_-2px_rgba(245,158,11,0.28)] ring-1 ring-amber-500/40"
+          : primaryAlert === "changed"
+            ? "animate-gentle-pulse-blue border-sky-500/70 shadow-[0_0_18px_-2px_rgba(56,189,248,0.3)] ring-1 ring-sky-500/40"
+            : order.status === "בהעמסה"
+              ? "border-accent/60 ring-2 ring-accent/30 shadow-sm"
+              : "border-border/80 shadow-sm";
 
   return (
     <motion.article
+      ref={cardRef}
       layout
       initial={{ opacity: 0, y: 24, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      animate={{ opacity: 1, y: 0, scale: isHighlighted ? 1.02 : 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.4) }}
+      transition={{ duration: 0.35, delay: isHighlighted ? 0 : Math.min(index * 0.04, 0.4) }}
       className={cn(
         "relative flex flex-col gap-3 rounded-2xl border bg-card/85 p-4 backdrop-blur-md transition-all duration-300",
         pulseClass,
-        order.status === "סופק" && "opacity-75",
+        order.status === "סופק" && !isHighlighted && "opacity-75",
       )}
     >
       {/* ---------------- Real-time Gentle Blinking Alert Banner ---------------- */}
