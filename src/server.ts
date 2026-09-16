@@ -3,6 +3,10 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleGenerateInsight, type GenerateInsightRequest } from "./server/geminiService";
+import {
+  sendOneSignalPushNotification,
+  type OneSignalPushPayload,
+} from "./server/oneSignalService";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -69,6 +73,33 @@ export default {
               status: 500,
               headers: { "content-type": "application/json; charset=utf-8" },
             },
+          );
+        }
+      }
+
+      // Handle OneSignal Push Notifications
+      if (url.pathname === "/api/notifications/onesignal" && request.method === "POST") {
+        try {
+          const body = (await request.json()) as OneSignalPushPayload;
+          if (!body || !body.title || !body.message) {
+            return new Response(
+              JSON.stringify({ success: false, error: "Missing title or message" }),
+              { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
+            );
+          }
+          const result = await sendOneSignalPushNotification(body);
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          });
+        } catch (err) {
+          console.error("Error in /api/notifications/onesignal:", err);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: err instanceof Error ? err.message : "Internal Notification Error",
+            }),
+            { status: 500, headers: { "content-type": "application/json; charset=utf-8" } },
           );
         }
       }

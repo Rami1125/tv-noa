@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  BellRing,
   Cloud,
   CloudOff,
   Compass,
@@ -58,6 +59,9 @@ export function TVHeader({
     isVoiceSpeaking,
     triggerVoiceTest,
     stopSpeakingVoice,
+    oneSignalStatus,
+    requestNotificationPermission,
+    sendPushAlert,
   } = useDispatchBoard();
   const now = useClock();
   const [isMuted, setIsMuted] = useState(isAudioMuted());
@@ -159,6 +163,46 @@ export function TVHeader({
               בדיקה
             </button>
           )}
+        </div>
+
+        {/* OneSignal Push Notifications */}
+        <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-background/60 p-1">
+          <button
+            onClick={async () => {
+              if (oneSignalStatus.permission !== "granted") {
+                await requestNotificationPermission();
+              } else {
+                sendPushAlert(
+                  "בדיקת התראה · OneSignal",
+                  "התראות OneSignal פעילות ומסונכרנות עם קול ושינויי סטטוס!",
+                  { type: "test" },
+                );
+              }
+            }}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-black transition",
+              oneSignalStatus.permission === "granted"
+                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/40 hover:bg-amber-500/25"
+                : "bg-muted/40 text-muted-foreground hover:bg-muted/60",
+            )}
+            title={
+              oneSignalStatus.permission === "granted"
+                ? "התראות OneSignal פעילות ומסונכרנות עם קול ושינויי סטטוס (לחץ לבדיקה)"
+                : "הפעל התראות דחיפה OneSignal"
+            }
+          >
+            <BellRing
+              className={cn(
+                "size-3.5",
+                oneSignalStatus.permission === "granted"
+                  ? "text-amber-400"
+                  : "text-muted-foreground",
+              )}
+            />
+            <span className="hidden xl:inline">
+              {oneSignalStatus.permission === "granted" ? "OneSignal פעיל" : "הפעל OneSignal"}
+            </span>
+          </button>
         </div>
 
         {/* Audio & Voice Mute/Unmute toggle */}

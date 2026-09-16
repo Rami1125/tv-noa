@@ -51,6 +51,14 @@ import {
   subscribeVoiceStatus,
   testVoiceAnnouncement,
 } from "@/services/voiceAlertService";
+import {
+  initOneSignalClient,
+  requestOneSignalPushPermission,
+  triggerOneSignalNotification,
+  subscribeOneSignalStatus,
+  type OneSignalStatus,
+  ONESIGNAL_APP_ID,
+} from "@/services/oneSignalService";
 
 const DEFAULT_SCREENSAVER_SETTINGS: ScreensaverSettings = {
   isEnabled: true,
@@ -271,6 +279,11 @@ interface DispatchContextValue extends DispatchState {
   isVoiceSpeaking: boolean;
   triggerVoiceTest: () => Promise<void>;
   speakUrgentAlert: (text: string) => Promise<void>;
+
+  /* OneSignal push notifications */
+  oneSignalStatus: OneSignalStatus;
+  requestNotificationPermission: () => Promise<boolean>;
+  sendPushAlert: (title: string, message: string, data?: Record<string, unknown>) => void;
 }
 
 const DispatchContext = createContext<DispatchContextValue | null>(null);
@@ -350,6 +363,21 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const lastInteractionTime = useRef(Date.now());
   const idleSecondsRef = useRef(0);
 
+  /* ---------------- OneSignal Push Notification State ---------------- */
+  const [oneSignalStatus, setOneSignalStatus] = useState<OneSignalStatus>({
+    isSupported: typeof window !== "undefined" && "Notification" in window,
+    permission: "default",
+    isSubscribed: false,
+    isInitialized: false,
+    appId: ONESIGNAL_APP_ID,
+  });
+
+  useEffect(() => {
+    initOneSignalClient();
+    const unsub = subscribeOneSignalStatus((st) => setOneSignalStatus(st));
+    return unsub;
+  }, []);
+
   /* ---------------- Real-time Highlight & Change Tracking ---------------- */
   const [recentlyChangedMap, setRecentlyChangedMap] = useState<Record<string, number>>({});
   const clearTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -376,6 +404,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     idleSecondsRef.current = 0;
     lastInteractionTime.current = Date.now();
     setIdleSecondsCount(0);
+
+    // Dispatch OneSignal push notification for order update
+    triggerOneSignalNotification(
+      `עדכון הזמנה #${cleanId}`,
+      `הזמנה #${cleanId} עודכנה בלוח השיבוץ בזמן אמת`,
+      { orderId: cleanId, type: "order_updated" },
+    );
 
     // Schedule cleanup after 8 seconds
     clearTimersRef.current[cleanId] = setTimeout(() => {
@@ -546,6 +581,12 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       durationMs: level === "critical" ? 11000 : 8500,
     };
     setAlerts((prev) => [alert, ...prev].slice(0, 12));
+    if (isFlash || level === "critical" || level === "warning") {
+      triggerOneSignalNotification("התראה מבצעית · ח. סבן", message, {
+        level,
+        isFlash,
+      });
+    }
     if (isFlash) {
       setFlash(alert);
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -658,6 +699,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
       // Trigger visual real-time pulse on card
       recordOrderChange(orderId);
+
+      // Trigger OneSignal push notification
+      triggerOneSignalNotification(
+        `עדכון סטטוס · הזמנה #${orderId}`,
+        `סטטוס ההזמנה עודכן ל: ${newStatus}`,
+        { orderId, status: newStatus, type: "status_change" },
+      );
 
       // 2. Persist to localStorage under key `saban_order_status_overrides`
       const overrideEntry: OrderStatusOverride = {
@@ -981,6 +1029,12 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             message: msg,
             timestamp: Date.now(),
           });
+          // Trigger OneSignal push notification
+          triggerOneSignalNotification(
+            "הזמנה חדשה התקבלה!",
+            `${order.customerName} (${order.city || "ללא יעד"}) · סבב ${order.round || 1}`,
+            { orderId: order.orderId, type: "new_order" },
+          );
           // Trigger NoaFlashOverlay for new order alert and play audio chime
           pushAlert(msg, "warning", true);
           playNewOrderSound();
@@ -989,6 +1043,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           if (isHighPriorityUrgentOrder(order)) {
             speakHebrew(
               `התקבלה הזמנה דחופה חדשה! מספר ${order.orderId}, עבור ${order.customerName}, סבב ${order.round}.`,
+              `הזמנה דחופה חדשה · #${order.orderId}`,
             );
           }
           return;
@@ -999,6 +1054,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           recordOrderChange(order.orderId);
           const isUrgent = order.status === "בהעמסה" || order.status === "מוכן להעמסה";
           const msg = `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`;
+
+          // Trigger OneSignal push notification
+          triggerOneSignalNotification(
+            `שינוי סטטוס · הזמנה #${order.orderId}`,
+            `${order.customerName}: ${before.status} ➔ ${order.status}`,
+            { orderId: order.orderId, oldStatus: before.status, newStatus: order.status },
+          );
 
           // Trigger autonomous Hebrew voice narration for high priority / urgent order status changes
           announceUrgentOrderStatusChange(order, order.status, before.status);
@@ -1632,6 +1694,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     isVoiceSpeaking: voiceSpeaking,
     triggerVoiceTest: testVoiceAnnouncement,
     speakUrgentAlert: speakHebrew,
+    /* OneSignal push notifications */
+    oneSignalStatus,
+    requestNotificationPermission: requestOneSignalPushPermission,
+    sendPushAlert: triggerOneSignalNotification,
   };
 
   return <DispatchContext.Provider value={value}>{children}</DispatchContext.Provider>;

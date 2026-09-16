@@ -8,6 +8,7 @@
 
 import type { Order, OrderStatus } from "@/types/dispatch";
 import { isAudioMuted, subscribeSoundMute } from "@/utils/soundEffects";
+import { triggerOneSignalNotification } from "@/services/oneSignalService";
 
 const VOICE_ENABLED_STORAGE_KEY = "saban_voice_alerts_enabled";
 const VOICE_VOLUME_STORAGE_KEY = "saban_voice_alerts_volume";
@@ -252,8 +253,18 @@ export function stopSpeaking(): void {
 
 /**
  * Low-level speech synthesis invoker with queue and memory management.
+ * Dispatches simultaneous OneSignal push notifications in parallel with speech.
  */
-export function speakHebrew(text: string): Promise<void> {
+export function speakHebrew(text: string, title?: string): Promise<void> {
+  // Dispatch OneSignal push notification simultaneously
+  try {
+    triggerOneSignalNotification(title || "חיווי קולי · ח. סבן נועה AI", text, {
+      type: "voice_narration",
+    });
+  } catch (err) {
+    console.warn("[VoiceAlertService] OneSignal dispatch notice:", err);
+  }
+
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       resolve();
@@ -482,7 +493,8 @@ export async function announceUrgentOrderStatusChange(
   }
 
   const script = buildUrgentOrderAnnouncementScript(order, newStatus, previousStatus);
-  await speakHebrew(script);
+  const title = `עדכון סטטוס · הזמנה #${order.orderId} (${newStatus})`;
+  await speakHebrew(script, title);
   return true;
 }
 
@@ -491,6 +503,6 @@ export async function announceUrgentOrderStatusChange(
  */
 export async function testVoiceAnnouncement(): Promise<void> {
   const sampleText =
-    "בדיקת מערכת התראות קוליות נועה איי איי. קריינות קולית בעברית פעילה ומוכנה לדיווח על הזמנות בסידור בזמן אמת.";
-  await speakHebrew(sampleText);
+    "בדיקת מערכת התראות קוליות נועה איי איי. קריינות קולית והתראות OneSignal פעילות ומסונכרנות בזמן אמת.";
+  await speakHebrew(sampleText, "בדיקת התראה וקול · OneSignal & Noa AI");
 }

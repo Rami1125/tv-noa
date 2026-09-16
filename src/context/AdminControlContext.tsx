@@ -18,6 +18,7 @@ import type {
 } from "@/types/screensaver";
 import { playAlarmSound, playNewOrderSound, playStatusChime } from "@/utils/soundEffects";
 import { speakHebrew } from "@/services/voiceAlertService";
+import { triggerOneSignalNotification } from "@/services/oneSignalService";
 
 export const DEFAULT_SCREENSAVER_ADMIN_SETTINGS: ScreensaverAdminSettings = {
   slides: [
@@ -956,9 +957,15 @@ export function AdminControlProvider({ children }: { children: React.ReactNode }
         playNewOrderSound();
       }
 
-      // Voice announcement if enabled
+      // Voice announcement if enabled (also dispatches OneSignal)
       if (params.voiceAnnounce) {
         speakHebrew(`הודעת כריזה מבצעית מחסן ח. סבן: ${params.title}. ${params.message}`);
+      } else {
+        // Dispatch OneSignal push notification if voice was not active
+        triggerOneSignalNotification(`הודעת כריזה · ${params.title}`, params.message, {
+          level: params.level,
+          type: "broadcast",
+        });
       }
 
       // Dispatch global broadcast event so TV screen overlay catches it
