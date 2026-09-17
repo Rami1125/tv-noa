@@ -8,11 +8,14 @@ import { UrgentDeliveriesTicker } from "@/components/tv/UrgentDeliveriesTicker";
 import { NoaAIBanner } from "@/components/tv/NoaAIBanner";
 import { OrderCard } from "@/components/tv/OrderCard";
 import { LoadingFocusModal } from "@/components/tv/LoadingFocusModal";
+import { DeliveredOrdersPanel } from "@/components/tv/DeliveredOrdersPanel";
+import { OrderArchiveModal } from "@/components/tv/OrderArchiveModal";
 import { NoaFlashOverlay } from "@/components/tv/NoaFlashOverlay";
 import { StudioDrawer } from "@/components/studio/StudioDrawer";
 import { DispatchScreensaver } from "@/components/screensaver/DispatchScreensaver";
 import { PickerView } from "@/components/mobile/PickerView";
 import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
+import { splitOrdersForBoard } from "@/services/dispatchArchiveService";
 import type { Order } from "@/types/dispatch";
 
 /** Detects mobile or touch-only devices (no fine pointer / narrow viewport). */
@@ -67,10 +70,18 @@ function RoundSection({ round, orders }: { round: number; orders: Order[] }) {
 }
 
 function LiveBoard() {
-  const { published, focusOrder } = useDispatchBoard();
+  const {
+    published,
+    focusOrder,
+    isVoiceAnnounceEnabled,
+    setVoiceAnnounceEnabled,
+    isVoiceSpeaking,
+    stopSpeakingVoice,
+  } = useDispatchBoard();
 
   const [viewMode, setViewMode] = useState<"tv" | "picker">("tv");
   const [isTrafficOpen, setIsTrafficOpen] = useState(false);
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -109,9 +120,16 @@ function LiveBoard() {
     }
   };
 
+  // Split published orders into 12h active board vs older archived orders
+  const { activeInProgressOrders, recentDeliveredOrders, archivedOrders, totalArchivedCount } =
+    useMemo(() => {
+      return splitOrdersForBoard(published);
+    }, [published]);
+
+  // Derive active rounds from in-progress orders
   const rounds = useMemo(() => {
     const map = new Map<number, Order[]>();
-    [...published]
+    [...activeInProgressOrders]
       .sort((a, b) => a.targetTime.localeCompare(b.targetTime))
       .forEach((o) => {
         const arr = map.get(o.round) ?? [];
@@ -119,7 +137,7 @@ function LiveBoard() {
         map.set(o.round, arr);
       });
     return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [published]);
+  }, [activeInProgressOrders]);
 
   if (viewMode === "picker") {
     // ── Hermetic mobile boundary ──────────────────────────────────
@@ -138,21 +156,64 @@ function LiveBoard() {
       <TVHeader
         onSwitchToPicker={() => handleSetViewMode("picker")}
         onOpenTraffic={() => setIsTrafficOpen(true)}
+        onOpenArchive={() => setIsArchiveOpen(true)}
+        totalArchivedCount={totalArchivedCount}
       />
       <NoaAIBanner />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[1.15fr_1fr]">
-        {focusOrder && (
-          <div className="min-h-0">
-            <LoadingFocusModal order={focusOrder} />
-          </div>
-        )}
+      {/* Main Board Grid: Right side = Active Rounds, Left side = Delivered Orders & Loading Focus */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[1.3fr_420px] 2xl:grid-cols-[1.4fr_460px]">
+        {/* Right side (Column 1 in RTL): Active Dispatch Rounds */}
         <div className="min-h-0 space-y-4 overflow-y-auto pl-1">
           {rounds.map(([round, orders]) => (
             <RoundSection key={round} round={round} orders={orders} />
           ))}
+          {rounds.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
+              <p className="text-base font-bold">אין כרגע הזמנות פתוחות בהעמסה בסבבים</p>
+              <p className="text-xs mt-1">
+                הזמנות שסופקו מוצגות ברשימה משמאל (12 שעות אחרונות) או בארכיון.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Left side (Column 2 in RTL): Empty space filled with Delivered Orders & Loading Modal */}
+        <div className="flex min-h-0 flex-col gap-3">
+          {focusOrder && (
+            <div className="shrink-0 min-h-0">
+              <LoadingFocusModal order={focusOrder} />
+            </div>
+          )}
+          <div className="min-h-0 flex-1">
+            <DeliveredOrdersPanel
+              recentDeliveredOrders={recentDeliveredOrders}
+              totalArchivedCount={totalArchivedCount}
+              onOpenArchive={() => setIsArchiveOpen(true)}
+              isVoiceAnnounceEnabled={isVoiceAnnounceEnabled}
+              onToggleVoice={() => {
+                if (isVoiceAnnounceEnabled) {
+                  stopSpeakingVoice();
+                  setVoiceAnnounceEnabled(false);
+                } else {
+                  setVoiceAnnounceEnabled(true);
+                }
+              }}
+              isVoiceSpeaking={isVoiceSpeaking}
+            />
+          </div>
         </div>
       </div>
+
+      {/* On-demand Archive Modal */}
+      <OrderArchiveModal
+        isOpen={isArchiveOpen}
+        onClose={() => setIsArchiveOpen(false)}
+        archivedOrders={archivedOrders}
+        allDeliveredAndCancelled={published.filter(
+          (o) => o.status === "סופק" || (o.status as string) === "בוטל",
+        )}
+      />
 
       {/* Traffic Live Modal for TV */}
       <AnimatePresence>

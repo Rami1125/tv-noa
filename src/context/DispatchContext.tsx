@@ -701,11 +701,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       recordOrderChange(orderId);
 
       // Trigger OneSignal push notification
-      triggerOneSignalNotification(
-        `עדכון סטטוס · הזמנה `,
-        `סטטוס ההזמנה עודכן ל: ${newStatus}`,
-        { orderId, status: newStatus, type: "status_change" },
-      );
+      triggerOneSignalNotification(`עדכון סטטוס · הזמנה `, `סטטוס ההזמנה עודכן ל: ${newStatus}`, {
+        orderId,
+        status: newStatus,
+        type: "status_change",
+      });
 
       // 2. Persist to localStorage under key `saban_order_status_overrides`
       const overrideEntry: OrderStatusOverride = {
@@ -836,10 +836,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
       playStatusChime();
 
-      pushAlert(
-        `הוחל ליקוט להזמנה  ע"י ${pickerName || "מחסנאי"} (SLA יעד 20 דק')`,
-        "info",
-      );
+      pushAlert(`הוחל ליקוט להזמנה  ע"י ${pickerName || "מחסנאי"} (SLA יעד 20 דק')`, "info");
       dispatchWebhookUpdate(orderId, "בהכנה");
     },
     [dispatchWebhookUpdate, pushAlert, recordOrderChange],
@@ -897,11 +894,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
       playSuccessSound();
 
-      pushAlert(
-        `הזמנה  לוקטה במלואה ומוכנה להעמסה ברציף! נהג וסדרן עודכנו.`,
-        "success",
-        true,
-      );
+      pushAlert(`הזמנה  לוקטה במלואה ומוכנה להעמסה ברציף! נהג וסדרן עודכנו.`, "success", true);
       dispatchWebhookUpdate(orderId, "מוכן להעמסה");
     },
     [dispatchWebhookUpdate, pushAlert, recordOrderChange],
@@ -910,11 +903,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const reportPickerOverrun = useCallback(
     (orderId: string) => {
       playAlarmSound();
-      pushAlert(
-        `חריגת ליקוט חמורה (מעל 20 דק') בהזמנה ! יש לתגבר את המחסן מיד.`,
-        "critical",
-        true,
-      );
+      pushAlert(`חריגת ליקוט חמורה (מעל 20 דק') בהזמנה ! יש לתגבר את המחסן מיד.`, "critical", true);
     },
     [pushAlert],
   );
@@ -1098,9 +1087,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         if (added.length > 0) {
           recordOrderChange(order.orderId);
           pushAlert(
-            `נוספו ${added.length} מק"טים להזמנה  (${added
-              .map((i) => i.sku)
-              .join(", ")})`,
+            `נוספו ${added.length} מק"טים להזמנה  (${added.map((i) => i.sku).join(", ")})`,
             "info",
           );
         }
@@ -1110,10 +1097,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         const nowApproved = order.items.filter((i) => i.isApproved).length;
         if (nowApproved > beforeApproved) {
           recordOrderChange(order.orderId);
-          pushAlert(
-            `אושרו ${nowApproved - beforeApproved} מק"טים נוספים בהזמנה `,
-            "success",
-          );
+          pushAlert(`אושרו ${nowApproved - beforeApproved} מק"טים נוספים בהזמנה `, "success");
         }
       });
     },

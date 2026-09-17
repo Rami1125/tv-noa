@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  Archive,
   BellRing,
   Cloud,
   CloudOff,
   Compass,
   Mic,
+  MicOff,
   Monitor,
   Radio,
   RefreshCw,
@@ -41,9 +43,13 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
 export function TVHeader({
   onSwitchToPicker,
   onOpenTraffic,
+  onOpenArchive,
+  totalArchivedCount = 0,
 }: {
   onSwitchToPicker?: () => void;
   onOpenTraffic?: () => void;
+  onOpenArchive?: () => void;
+  totalArchivedCount?: number;
 }) {
   const {
     counts,
@@ -55,6 +61,7 @@ export function TVHeader({
     setScreensaverActive,
     nearestOrderMinutesRemaining,
     isVoiceAnnounceEnabled,
+    setVoiceAnnounceEnabled,
     toggleVoiceAnnounce,
     isVoiceSpeaking,
     triggerVoiceTest,
@@ -125,10 +132,11 @@ export function TVHeader({
         <div className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/60 p-1">
           <button
             onClick={() => {
-              if (isVoiceSpeaking) {
+              if (isVoiceAnnounceEnabled) {
                 stopSpeakingVoice();
+                setVoiceAnnounceEnabled(false);
               } else {
-                toggleVoiceAnnounce();
+                setVoiceAnnounceEnabled(true);
               }
             }}
             className={cn(
@@ -137,21 +145,27 @@ export function TVHeader({
                 ? "bg-fuchsia-500/25 text-fuchsia-300 ring-1 ring-fuchsia-400 animate-pulse"
                 : isVoiceAnnounceEnabled
                   ? "bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
-                  : "bg-muted/40 text-muted-foreground hover:bg-muted/60",
+                  : "bg-rose-500/15 text-rose-400 ring-1 ring-rose-500/30 hover:bg-rose-500/25",
             )}
             title={
               isVoiceAnnounceEnabled
-                ? "קריינות קולית עברית חיה (נועה AI) פעילה להזמנות בסידור (לחץ להשתקה)"
-                : "קריינות קולית מושתקת (לחץ להפעלה)"
+                ? "חיווי קולי פעיל · לחץ להשתקה מלאה"
+                : "חיווי קולי מושתק · לחץ להפעלה"
             }
           >
-            <Mic className={cn("size-3.5", isVoiceSpeaking && "animate-bounce text-fuchsia-400")} />
-            <span className="hidden lg:inline">
+            {isVoiceAnnounceEnabled ? (
+              <Mic
+                className={cn("size-3.5", isVoiceSpeaking && "animate-bounce text-fuchsia-400")}
+              />
+            ) : (
+              <MicOff className="size-3.5 text-rose-400" />
+            )}
+            <span className="inline">
               {isVoiceSpeaking
                 ? "נועה מדווחת..."
                 : isVoiceAnnounceEnabled
-                  ? "קריינות חיה"
-                  : "קריינות כבויה"}
+                  ? "חיווי קולי פעיל"
+                  : "חיווי קולי מושתק"}
             </span>
           </button>
           {isVoiceAnnounceEnabled && (
@@ -240,6 +254,24 @@ export function TVHeader({
               <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
             )}
         </button>
+
+        {/* On-demand Archive Modal Button */}
+        {onOpenArchive && (
+          <button
+            type="button"
+            onClick={onOpenArchive}
+            className="flex items-center gap-2 rounded-xl bg-secondary/80 px-3 py-2 text-xs font-bold text-foreground ring-1 ring-border transition hover:bg-primary hover:text-primary-foreground shadow-sm"
+            title="פתח ארכיון הזמנות שסופקו ובוטלו (מעל 12 שעות)"
+          >
+            <Archive className="size-4 text-amber-500" />
+            <span>ארכיון</span>
+            {totalArchivedCount > 0 && (
+              <span className="rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 text-[10px] font-mono font-bold">
+                {totalArchivedCount}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Live Traffic & Waze Map Button */}
         {onOpenTraffic && (

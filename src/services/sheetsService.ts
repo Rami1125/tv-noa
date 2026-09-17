@@ -196,7 +196,24 @@ export const MOCK_ORDERS: Order[] = [
 ];
 
 export function getMockOrders(): Order[] {
-  return JSON.parse(JSON.stringify(MOCK_ORDERS)) as Order[];
+  const cloned = JSON.parse(JSON.stringify(MOCK_ORDERS)) as Order[];
+  const now = Date.now();
+  const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+  const fourHoursAgo = new Date(now - 4.5 * 60 * 60 * 1000).toISOString();
+  const twoDaysAgo = new Date(now - 48 * 60 * 60 * 1000).toISOString();
+
+  return cloned.map((o) => {
+    if (o.orderId === "6215473") {
+      return { ...o, updatedAt: twoHoursAgo };
+    }
+    if (o.orderId === "6215454") {
+      return { ...o, updatedAt: fourHoursAgo };
+    }
+    if (o.orderId === "613304" || o.orderId === "6215462") {
+      return { ...o, updatedAt: twoDaysAgo };
+    }
+    return o;
+  });
 }
 
 /* ------------------------------------------------------------------ */

@@ -200,6 +200,9 @@ export function isVoiceAnnounceEnabled(): boolean {
 
 export function setVoiceAnnounceEnabled(enabled: boolean): void {
   isVoiceAnnounceEnabledState = enabled;
+  if (!enabled) {
+    stopSpeaking();
+  }
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, String(enabled));
@@ -211,8 +214,9 @@ export function setVoiceAnnounceEnabled(enabled: boolean): void {
 }
 
 export function toggleVoiceAnnounce(): boolean {
-  setVoiceAnnounceEnabled(!isVoiceAnnounceEnabledState);
-  return isVoiceAnnounceEnabledState;
+  const next = !isVoiceAnnounceEnabledState;
+  setVoiceAnnounceEnabled(next);
+  return next;
 }
 
 export function getVoiceVolume(): number {
