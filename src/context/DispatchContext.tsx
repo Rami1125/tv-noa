@@ -668,13 +668,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           setLatestOrderEvent({
             type: "override_synced",
             orderId,
-            message: `סטטוס הזמנה #${orderId} סונכרן ישירות לעמודת סטטוס בגיליון Google Sheets`,
+            message: `סטטוס הזמנה  סונכרן ישירות לעמודת סטטוס בגיליון Google Sheets`,
             timestamp: Date.now(),
           });
         }
       })
       .catch((err) => {
-        console.warn(`[Dispatch] Background sync deferred for order #${orderId}:`, err);
+        console.warn(`[Dispatch] Background sync deferred for order :`, err);
         // Non-blocking: local override remains active and will be preserved during polling!
       });
   }, []);
@@ -702,7 +702,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
       // Trigger OneSignal push notification
       triggerOneSignalNotification(
-        `עדכון סטטוס · הזמנה #${orderId}`,
+        `עדכון סטטוס · הזמנה `,
         `סטטוס ההזמנה עודכן ל: ${newStatus}`,
         { orderId, status: newStatus, type: "status_change" },
       );
@@ -726,30 +726,30 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           type: "status_urgent",
           orderId,
           order: published.find((o) => o.orderId === orderId),
-          message: `הזמנה #${orderId} מוכנה/הועברה להעמסה כעת!`,
+          message: `הזמנה  מוכנה/הועברה להעמסה כעת!`,
           timestamp: now,
         });
-        pushAlert(`הזמנה #${orderId} הועברה לסטטוס: ${newStatus}`, "warning", true);
+        pushAlert(`הזמנה  הועברה לסטטוס: ${newStatus}`, "warning", true);
         playSuccessSound();
       } else if (newStatus === "סופק") {
         setLatestOrderEvent({
           type: "status_changed",
           orderId,
           order: published.find((o) => o.orderId === orderId),
-          message: `הזמנה #${orderId} סופקה בהצלחה!`,
+          message: `הזמנה  סופקה בהצלחה!`,
           timestamp: now,
         });
-        pushAlert(`הזמנה #${orderId} סופקה בהצלחה!`, "success");
+        pushAlert(`הזמנה  סופקה בהצלחה!`, "success");
         playSuccessSound();
       } else {
         setLatestOrderEvent({
           type: "status_changed",
           orderId,
           order: published.find((o) => o.orderId === orderId),
-          message: `הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`,
+          message: `הזמנה  עודכנה לסטטוס: ${newStatus}`,
           timestamp: now,
         });
-        pushAlert(`הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`, "info");
+        pushAlert(`הזמנה  עודכנה לסטטוס: ${newStatus}`, "info");
         playStatusChime();
       }
 
@@ -837,7 +837,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       playStatusChime();
 
       pushAlert(
-        `הוחל ליקוט להזמנה #${orderId} ע"י ${pickerName || "מחסנאי"} (SLA יעד 20 דק')`,
+        `הוחל ליקוט להזמנה  ע"י ${pickerName || "מחסנאי"} (SLA יעד 20 דק')`,
         "info",
       );
       dispatchWebhookUpdate(orderId, "בהכנה");
@@ -898,7 +898,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       playSuccessSound();
 
       pushAlert(
-        `הזמנה #${orderId} לוקטה במלואה ומוכנה להעמסה ברציף! נהג וסדרן עודכנו.`,
+        `הזמנה  לוקטה במלואה ומוכנה להעמסה ברציף! נהג וסדרן עודכנו.`,
         "success",
         true,
       );
@@ -911,7 +911,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     (orderId: string) => {
       playAlarmSound();
       pushAlert(
-        `חריגת ליקוט חמורה (מעל 20 דק') בהזמנה #${orderId}! יש לתגבר את המחסן מיד.`,
+        `חריגת ליקוט חמורה (מעל 20 דק') בהזמנה ! יש לתגבר את המחסן מיד.`,
         "critical",
         true,
       );
@@ -1185,7 +1185,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             saveLocalOverrides(next);
             return next;
           });
-          pushAlert(`הזמנה #${orderId} סונכרנה בהצלחה לגיליון Google Sheets`, "success");
+          pushAlert(`הזמנה  סונכרנה בהצלחה לגיליון Google Sheets`, "success");
           return true;
         }
         return false;
