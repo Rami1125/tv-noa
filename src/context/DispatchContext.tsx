@@ -1042,8 +1042,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           // If brand new order is urgent/high priority, announce it in Hebrew
           if (isHighPriorityUrgentOrder(order)) {
             speakHebrew(
-              `התקבלה הזמנה דחופה חדשה! מספר ${order.orderId}, עבור ${order.customerName}, סבב ${order.round}.`,
-              `הזמנה דחופה חדשה · #${order.orderId}`,
+              `התקבלה הזמנה בסידור חדשה! מספר , עבור ${order.customerName}, סבב ${order.round}.`,
+              `הזמנה בסידור חדשה ·`,
             );
           }
           return;
@@ -1053,11 +1053,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         if (before.status !== order.status) {
           recordOrderChange(order.orderId);
           const isUrgent = order.status === "בהעמסה" || order.status === "מוכן להעמסה";
-          const msg = `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`;
+          const msg = `סטטוס עודכן — הזמנה  ${order.customerName}: ${order.status}`;
 
           // Trigger OneSignal push notification
           triggerOneSignalNotification(
-            `שינוי סטטוס · הזמנה #${order.orderId}`,
+            `שינוי סטטוס · הזמנה #`,
             `${order.customerName}: ${before.status} ➔ ${order.status}`,
             { orderId: order.orderId, oldStatus: before.status, newStatus: order.status },
           );
@@ -1098,7 +1098,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         if (added.length > 0) {
           recordOrderChange(order.orderId);
           pushAlert(
-            `נוספו ${added.length} מק"טים להזמנה ${order.orderId} (${added
+            `נוספו ${added.length} מק"טים להזמנה  (${added
               .map((i) => i.sku)
               .join(", ")})`,
             "info",
@@ -1111,7 +1111,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         if (nowApproved > beforeApproved) {
           recordOrderChange(order.orderId);
           pushAlert(
-            `אושרו ${nowApproved - beforeApproved} מק"טים נוספים בהזמנה ${order.orderId}`,
+            `אושרו ${nowApproved - beforeApproved} מק"טים נוספים בהזמנה `,
             "success",
           );
         }
@@ -1336,10 +1336,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         const mins = minutesUntil(order.targetTime, now);
 
         if (mins <= 0) {
-          const key = `overrun-${order.orderId}`;
+          const key = `overrun-`;
           setAlerts((prev) => {
             if (prev.some((a) => a.id === key)) return prev;
-            const msg = `חריגה בלו״ז: הזמנה #${order.orderId} ל${order.customerName} חרגה משעת היעד (${order.targetTime})!`;
+            const msg = `חריגה בלו״ז: הזמנה # ל${order.customerName} חרגה משעת היעד (${order.targetTime})!`;
             setLatestOrderEvent({
               type: "status_urgent",
               orderId: order.orderId,
@@ -1361,11 +1361,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             ].slice(0, 12);
           });
         } else if (mins > 0 && mins <= 25) {
-          const key = `eta-${order.orderId}`;
+          const key = `eta-`;
           setAlerts((prev) => {
             if (prev.some((a) => a.id === key)) return prev;
             const isUrgent = mins <= 10;
-            const msg = `נותרו ${mins} דקות ליעד — הזמנה ${order.orderId} ל${order.customerName} (${order.city})`;
+            const msg = `נותרו ${mins} דקות ליעד — הזמנה  ל${order.customerName} (${order.city})`;
             if (isUrgent) {
               setLatestOrderEvent({
                 type: "status_urgent",
