@@ -1042,7 +1042,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           // If brand new order is urgent/high priority, announce it in Hebrew
           if (isHighPriorityUrgentOrder(order)) {
             speakHebrew(
-              `התקבלה הזמנה בסידור חדשה! מספר , עבור ${order.customerName}, סבב ${order.round}.`,
+              `התקבלה הזמנה בסידור חדשה!  , עבור ${order.customerName}, סבב ${order.round}.`,
               `הזמנה בסידור חדשה ·`,
             );
           }
