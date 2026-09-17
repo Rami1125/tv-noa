@@ -407,8 +407,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
     // Dispatch OneSignal push notification for order update
     triggerOneSignalNotification(
-      `עדכון הזמנה #${cleanId}`,
-      `הזמנה #${cleanId} עודכנה בלוח השיבוץ בזמן אמת`,
+      `עדכון הזמנה `,
+      `הזמנה  עודכנה בלוח השיבוץ בזמן אמת`,
       { orderId: cleanId, type: "order_updated" },
     );
 
