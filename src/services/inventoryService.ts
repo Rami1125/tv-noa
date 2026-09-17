@@ -28,7 +28,7 @@ import {
 import { resolveProductImage, getStoredProductMetadata } from "@/services/productImageService";
 
 // ערך בסיס גלובלי לפתיחת מלאי - 5,000 יחידות כדי למנוע התראות קריטיות שגויות
-export const GLOBAL_INITIAL_STOCK_BASE = 500;
+export const GLOBAL_INITIAL_STOCK_BASE = 10;
 
 // הגדרת מבנה לפריט מלאי חי המוצג בדשבורד ובמובייל
 export interface LiveInventoryItem {
