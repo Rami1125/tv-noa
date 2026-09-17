@@ -26,6 +26,9 @@ const STORAGE_CUSTOM_METADATA_KEY = "saban_custom_product_metadata_v2";
 export interface CustomProductMetadata {
   customSku?: string;
   customName?: string;
+  customSubtitle?: string;
+  category?: "cement" | "big_bag" | "block" | "dry_mix" | "other";
+  unit?: string;
   updatedAt?: string;
 }
 
@@ -35,6 +38,7 @@ export interface SheetProductItem {
   name: string;
   originalName: string;
   cleanName: string;
+  customSubtitle?: string;
   isCustomMetadata?: boolean;
   category: "cement" | "big_bag" | "block" | "dry_mix" | "other";
   unit: string;
@@ -320,16 +324,36 @@ export function getStoredShortagePosters(): Record<string, string> {
 
 /**
  * שמירת תמונה מותאמת אישית למוצר
+ * תומך בשמירה על פני מספר מפתחות (מק״ט נוכחי, מק״ט מקורי, שם מקורי, שם ערוך) כדי להבטיח זיהוי ודאי גם לאחר ריענון
  */
-export function saveCustomProductImage(sku: string, imageUrl: string): void {
-  if (typeof window === "undefined" || !sku) return;
+export function saveCustomProductImage(
+  skuOrKeys: string | string[],
+  imageUrl: string,
+  extraKeys: string[] = [],
+): void {
+  if (typeof window === "undefined" || !imageUrl) return;
+  const rawList = Array.isArray(skuOrKeys)
+    ? [...skuOrKeys, ...extraKeys]
+    : [skuOrKeys, ...extraKeys];
+  const keys = Array.from(
+    new Set(
+      rawList
+        .map((k) => k?.trim())
+        .filter((k): k is string => Boolean(k) && k !== "—" && k !== "כללי"),
+    ),
+  );
+
+  if (keys.length === 0) return;
+
   try {
     const current = getStoredCustomProductImages();
-    current[sku] = imageUrl;
+    for (const key of keys) {
+      current[key] = imageUrl;
+    }
     localStorage.setItem(STORAGE_CUSTOM_IMAGES_KEY, JSON.stringify(current));
     // Trigger storage event for cross-component sync
     window.dispatchEvent(
-      new CustomEvent("saban-product-images-updated", { detail: { sku, imageUrl } }),
+      new CustomEvent("saban-product-images-updated", { detail: { keys, imageUrl } }),
     );
   } catch (err) {
     console.error("Failed to save custom product image:", err);
@@ -339,14 +363,33 @@ export function saveCustomProductImage(sku: string, imageUrl: string): void {
 /**
  * שמירת כרזת חוסר מעוצבת למוצר
  */
-export function saveCustomShortagePoster(sku: string, posterDataUrl: string): void {
-  if (typeof window === "undefined" || !sku) return;
+export function saveCustomShortagePoster(
+  skuOrKeys: string | string[],
+  posterDataUrl: string,
+  extraKeys: string[] = [],
+): void {
+  if (typeof window === "undefined" || !posterDataUrl) return;
+  const rawList = Array.isArray(skuOrKeys)
+    ? [...skuOrKeys, ...extraKeys]
+    : [skuOrKeys, ...extraKeys];
+  const keys = Array.from(
+    new Set(
+      rawList
+        .map((k) => k?.trim())
+        .filter((k): k is string => Boolean(k) && k !== "—" && k !== "כללי"),
+    ),
+  );
+
+  if (keys.length === 0) return;
+
   try {
     const current = getStoredShortagePosters();
-    current[sku] = posterDataUrl;
+    for (const key of keys) {
+      current[key] = posterDataUrl;
+    }
     localStorage.setItem(STORAGE_SHORTAGE_POSTERS_KEY, JSON.stringify(current));
     window.dispatchEvent(
-      new CustomEvent("saban-product-images-updated", { detail: { sku, posterDataUrl } }),
+      new CustomEvent("saban-product-images-updated", { detail: { keys, posterDataUrl } }),
     );
   } catch (err) {
     console.error("Failed to save shortage poster:", err);
@@ -381,28 +424,54 @@ export function getStoredProductMetadata(): Record<string, CustomProductMetadata
 }
 
 /**
- * שמירת שם מוצר ומק״ט מותאמים אישית (נשמר לפי המק״ט/מזהה המקורי)
+ * שמירת שם מוצר ומק״ט מותאמים אישית
+ * נשמר באופן מאובטח ומסונכרן לפי כל המזהים האפשריים (מק״ט מקורי, שם מקורי, מק״ט ערוך)
  */
 export function saveProductMetadata(
-  originalSkuOrId: string,
-  data: { customSku?: string; customName?: string },
+  primaryKey: string,
+  data: {
+    customSku?: string;
+    customName?: string;
+    customSubtitle?: string;
+    category?: "cement" | "big_bag" | "block" | "dry_mix" | "other";
+    unit?: string;
+  },
+  aliasKeys: string[] = [],
 ): void {
-  if (typeof window === "undefined" || !originalSkuOrId) return;
+  if (typeof window === "undefined" || !primaryKey) return;
   try {
     const current = getStoredProductMetadata();
     const customSku = data.customSku?.trim();
     const customName = data.customName?.trim();
+    const customSubtitle = data.customSubtitle?.trim();
+    const category = data.category;
+    const unit = data.unit?.trim();
 
-    current[originalSkuOrId] = {
-      customSku: customSku ? customSku : undefined,
-      customName: customName ? customName : undefined,
+    const record: CustomProductMetadata = {
+      customSku: customSku || undefined,
+      customName: customName || undefined,
+      customSubtitle: customSubtitle || undefined,
+      category: category || undefined,
+      unit: unit || undefined,
       updatedAt: new Date().toISOString(),
     };
+
+    const keysToUpdate = Array.from(
+      new Set(
+        [primaryKey, ...aliasKeys, customSku, customName]
+          .map((k) => k?.trim())
+          .filter((k): k is string => Boolean(k) && k !== "—" && k !== "כללי"),
+      ),
+    );
+
+    for (const key of keysToUpdate) {
+      current[key] = record;
+    }
 
     localStorage.setItem(STORAGE_CUSTOM_METADATA_KEY, JSON.stringify(current));
     window.dispatchEvent(
       new CustomEvent("saban-product-images-updated", {
-        detail: { originalSkuOrId, customSku, customName },
+        detail: { primaryKey, keys: keysToUpdate, record },
       }),
     );
   } catch (err) {
@@ -413,15 +482,26 @@ export function saveProductMetadata(
 /**
  * שחזור פרטי מוצר (שם ומק״ט) לברירת מחדל
  */
-export function resetProductMetadata(originalSkuOrId: string): void {
-  if (typeof window === "undefined" || !originalSkuOrId) return;
+export function resetProductMetadata(primaryKey: string, aliasKeys: string[] = []): void {
+  if (typeof window === "undefined" || !primaryKey) return;
   try {
     const current = getStoredProductMetadata();
-    delete current[originalSkuOrId];
+    const existing = current[primaryKey];
+    const keysToDelete = Array.from(
+      new Set(
+        [primaryKey, ...aliasKeys, existing?.customSku, existing?.customName]
+          .map((k) => k?.trim())
+          .filter((k): k is string => Boolean(k) && k !== "—" && k !== "כללי"),
+      ),
+    );
+
+    for (const k of keysToDelete) {
+      delete current[k];
+    }
     localStorage.setItem(STORAGE_CUSTOM_METADATA_KEY, JSON.stringify(current));
     window.dispatchEvent(
       new CustomEvent("saban-product-images-updated", {
-        detail: { originalSkuOrId, reset: true },
+        detail: { primaryKey, reset: true },
       }),
     );
   } catch (err) {
@@ -430,7 +510,7 @@ export function resetProductMetadata(originalSkuOrId: string): void {
 }
 
 /**
- * קבלת התמונה המתאימה למוצר — לוקח בחשבון האם המוצר בחוסר
+ * קבלת התמונה המתאימה למוצר — לוקח בחשבון האם המוצר בחוסר, תמונות מותאמות, קטלוג וקטגוריה
  */
 export function resolveProductImage(
   sku: string,
@@ -445,38 +525,48 @@ export function resolveProductImage(
   const customImages = getStoredCustomProductImages();
   const shortagePosters = getStoredShortagePosters();
 
+  const cleanSku = (sku || "").trim();
+  const cleanName = (productName || "").trim();
+
   // 1. אם המוצר בחוסר ויש כרזת חוסר שמורה במאגר
-  if (isShortage && shortagePosters[sku]) {
-    return shortagePosters[sku];
+  if (isShortage) {
+    const savedPoster =
+      (cleanSku && shortagePosters[cleanSku]) || (cleanName && shortagePosters[cleanName]);
+    if (savedPoster) return savedPoster;
+
+    // 2. אם המוצר בחוסר וטרם נשמרה כרזה, נייצר כרזת חוסר מעוצבת במקום!
+    if (cleanName) {
+      return generateShortagePosterSvg({
+        sku: cleanSku,
+        name: cleanName,
+        category,
+        deficit,
+        unit,
+        safetyThreshold,
+        effectiveBalance,
+        isCritical: true,
+      });
+    }
   }
 
-  // 2. אם המוצר בחוסר וטרם נשמרה כרזה, נייצר כרזת חוסר מעוצבת במקום!
-  if (isShortage && productName) {
-    return generateShortagePosterSvg({
-      sku,
-      name: productName,
-      category,
-      deficit,
-      unit,
-      safetyThreshold,
-      effectiveBalance,
-      isCritical: true,
-    });
-  }
-
-  // 3. תמונה שהוגדרה ידנית על ידי המנהל
-  if (customImages[sku]) {
-    return customImages[sku];
+  // 3. תמונה שהוגדרה ידנית על ידי המנהל (נבדק לפי מק״ט, שם מוצר או מזהים חלופיים)
+  const userImage =
+    (cleanSku && customImages[cleanSku]) ||
+    (cleanName && customImages[cleanName]) ||
+    customImages[cleanSku.toLowerCase()] ||
+    customImages[cleanName.toLowerCase()];
+  if (userImage) {
+    return userImage;
   }
 
   // 4. תמונת קטלוג איכותית
-  if (HIGH_RES_PRODUCT_CATALOG_IMAGES[sku]) {
-    return HIGH_RES_PRODUCT_CATALOG_IMAGES[sku];
+  if (cleanSku && HIGH_RES_PRODUCT_CATALOG_IMAGES[cleanSku]) {
+    return HIGH_RES_PRODUCT_CATALOG_IMAGES[cleanSku];
   }
 
   // 5. תמונת קטגוריה בסיסית
-  if (PRODUCT_IMAGES[sku]) {
-    return PRODUCT_IMAGES[sku];
+  if (cleanSku && PRODUCT_IMAGES[cleanSku]) {
+    return PRODUCT_IMAGES[cleanSku];
   }
 
   return PRODUCT_IMAGES[category] || PRODUCT_IMAGES.default;
@@ -578,10 +668,19 @@ export function extractProductsFromSheetOrders(
     const palletsToRefill =
       deficitToRefill > 0 ? Math.max(1, Math.ceil(deficitToRefill / unitsPerPallet)) : 0;
 
-    const isCustomImage = Boolean(customImages[effectiveSku] || customImages[originalSku]);
+    const isCustomImage = Boolean(
+      customImages[effectiveSku] ||
+      customImages[originalSku] ||
+      customImages[effectiveName] ||
+      customImages[originalName] ||
+      customImages[effectiveSku.toLowerCase()] ||
+      customImages[originalSku.toLowerCase()],
+    );
     const imageUrl =
       customImages[effectiveSku] ||
       customImages[originalSku] ||
+      customImages[effectiveName] ||
+      customImages[originalName] ||
       HIGH_RES_PRODUCT_CATALOG_IMAGES[effectiveSku] ||
       HIGH_RES_PRODUCT_CATALOG_IMAGES[originalSku] ||
       PRODUCT_IMAGES[effectiveSku] ||
@@ -592,6 +691,8 @@ export function extractProductsFromSheetOrders(
     const shortagePosterUrl =
       shortagePosters[effectiveSku] ||
       shortagePosters[originalSku] ||
+      shortagePosters[effectiveName] ||
+      shortagePosters[originalName] ||
       generateShortagePosterSvg({
         sku: effectiveSku,
         name: effectiveName,
@@ -609,9 +710,10 @@ export function extractProductsFromSheetOrders(
       name: effectiveName,
       originalName,
       cleanName: effectiveName,
+      customSubtitle: meta?.customSubtitle,
       isCustomMetadata,
-      category: rule.category,
-      unit: rule.unit,
+      category: (meta?.category || rule.category) as SheetProductItem["category"],
+      unit: meta?.unit || rule.unit,
       initialBase,
       safetyThreshold,
       actualDrawn: usage.actualDrawn,

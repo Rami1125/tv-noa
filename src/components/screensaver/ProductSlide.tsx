@@ -48,11 +48,18 @@ export function ProductSlide({
   const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({});
   const [imagesVersion, setImagesVersion] = useState(0);
 
-  // האזנה לעדכון תמונות מלוח הבקרה של המנהל
+  // האזנה לעדכון תמונות ומטא-דאטה מלוח הבקרה של המנהל וסנכרון מיידי בעת טעינת צד לקוח
   useEffect(() => {
+    // הרצה מיידית בצד לקוח כדי להבטיח קריאה מלאה של ה-LocalStorage לאחר הידרציה
+    setImagesVersion((v) => v + 1);
+
     const handleImageUpdate = () => setImagesVersion((v) => v + 1);
     window.addEventListener("saban-product-images-updated", handleImageUpdate);
-    return () => window.removeEventListener("saban-product-images-updated", handleImageUpdate);
+    window.addEventListener("storage", handleImageUpdate);
+    return () => {
+      window.removeEventListener("saban-product-images-updated", handleImageUpdate);
+      window.removeEventListener("storage", handleImageUpdate);
+    };
   }, []);
 
   // חילוץ וחישוב פריטי המלאי המנורמלים בזמן אמת
@@ -115,16 +122,28 @@ export function ProductSlide({
     return () => clearInterval(timer);
   }, [isPaused, intervalSeconds, items.length, handleNext]);
 
-  // שליטה מהמקלדת למסכי מחשב וסדרנים
+  // שליטה מהמקלדת למסכי מחשב וסדרנים (רק כאשר המשתמש אינו מקליד בשדה קלט)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable ||
+          target.closest?.("input, textarea, select, [contenteditable='true']"))
+      ) {
+        return;
+      }
+
       if (e.key === "ArrowRight") {
         e.preventDefault();
         handlePrev(); // RTL: חץ ימינה הולך אחורה
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         handleNext(); // RTL: חץ שמאלה מתקדם
-      } else if (e.key === " ") {
+      } else if (e.key === " " || e.code === "Space") {
         e.preventDefault();
         togglePause();
       }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   ArrowDown,
@@ -26,6 +26,8 @@ import {
   X,
   Palette,
   Pencil,
+  Upload,
+  Tag,
 } from "lucide-react";
 import { useAdminControl } from "@/context/AdminControlContext";
 import { useDispatchBoard } from "@/context/DispatchContext";
@@ -38,6 +40,7 @@ import {
   resetCustomProductImages,
   saveProductMetadata,
   resetProductMetadata,
+  HIGH_RES_PRODUCT_CATALOG_IMAGES,
   SheetProductItem,
 } from "@/services/productImageService";
 import { cn } from "@/lib/utils";
@@ -66,28 +69,64 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
   const [productSearch, setProductSearch] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "shortage" | "custom">("all");
   const [previewItem, setPreviewItem] = useState<SheetProductItem | null>(null);
-  const [editingSkuUrl, setEditingSkuUrl] = useState<{ sku: string; url: string } | null>(null);
+
+  // גרסת תמונות ופרטי מוצר לסנכרון מיידי
+  const [imagesVersion, setImagesVersion] = useState(0);
+
+  // מודאל תמונת מוצר
+  const [editingSkuUrl, setEditingSkuUrl] = useState<{
+    sku: string;
+    originalSku?: string;
+    name: string;
+    originalName?: string;
+    url: string;
+  } | null>(null);
+
+  // מודאל עריכת שם מוצר ומק״ט מורחב ומקצועי
   const [editingProduct, setEditingProduct] = useState<{
     originalSku: string;
     originalName: string;
     sku: string;
     name: string;
+    customSubtitle?: string;
+    category?: SheetProductItem["category"];
+    unit?: string;
+    imageUrl?: string;
     isCustom: boolean;
   } | null>(null);
+
   const [notification, setNotification] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3500);
   };
 
+  // האזנה מיידית לשינויי LocalStorage ואירועי עדכון (מבטיח סינכרון בין טאבים ורענון צד לקוח)
+  useEffect(() => {
+    setImagesVersion((v) => v + 1);
+
+    const handleUpdate = () => {
+      setImagesVersion((v) => v + 1);
+    };
+
+    window.addEventListener("saban-product-images-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("saban-product-images-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
   // Total cycle duration across enabled slides
   const totalCycleDuration = activeSlides.reduce((acc, s) => acc + s.durationSeconds, 0);
 
-  // חילוץ רשימת מוצרים מהגיליון בזמן אמת
+  // חילוץ רשימת מוצרים מהגיליון בזמן אמת עם תמיכה ב-imagesVersion
   const sheetProducts = useMemo(() => {
+    void imagesVersion;
     return extractProductsFromSheetOrders(published || [], settings.branchFilter);
-  }, [published, settings.branchFilter]);
+  }, [published, settings.branchFilter, imagesVersion]);
 
   // סינון מוצרים לפי חיפוש וסטטוס
   const filteredProducts = useMemo(() => {
@@ -130,7 +169,9 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
       effectiveBalance: item.effectiveBalance,
       isCritical: item.isCritical || true,
     });
-    saveCustomShortagePoster(item.sku, posterSvgUrl);
+    const keys = [item.sku, item.originalSku, item.cleanName, item.originalName];
+    saveCustomShortagePoster(keys, posterSvgUrl);
+    setImagesVersion((v) => v + 1);
     showNotification(`נוצרה כרזת חוסר מעוצבת למק״ט ${item.sku} (${item.cleanName})!`);
   };
 
@@ -149,23 +190,34 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
           effectiveBalance: item.effectiveBalance,
           isCritical: item.isCritical,
         });
-        saveCustomShortagePoster(item.sku, posterSvgUrl);
+        const keys = [item.sku, item.originalSku, item.cleanName, item.originalName];
+        saveCustomShortagePoster(keys, posterSvgUrl);
         count++;
       }
     });
+    setImagesVersion((v) => v + 1);
     showNotification(`הופקו בהצלחה ${count} כרזות חוסר מעוצבות לכל הפריטים בחוסר!`);
   };
 
   const handleSaveCustomImageUrl = () => {
     if (!editingSkuUrl) return;
-    saveCustomProductImage(editingSkuUrl.sku, editingSkuUrl.url);
-    showNotification(`התמונה נשמרה למק״ט ${editingSkuUrl.sku}`);
+    const keys = [
+      editingSkuUrl.sku,
+      editingSkuUrl.originalSku,
+      editingSkuUrl.name,
+      editingSkuUrl.originalName,
+    ].filter(Boolean) as string[];
+
+    saveCustomProductImage(keys, editingSkuUrl.url);
+    setImagesVersion((v) => v + 1);
+    showNotification(`התמונה נשמרה בהצלחה למוצר "${editingSkuUrl.name}"!`);
     setEditingSkuUrl(null);
   };
 
   const handleResetImages = () => {
     if (confirm("האם לאפס את כל התמונות המותאמות אישית לברירת מחדל?")) {
       resetCustomProductImages();
+      setImagesVersion((v) => v + 1);
       showNotification("כל התמונות המותאמות אופסו לברירת מחדל");
     }
   };
@@ -176,6 +228,10 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
       originalName: item.originalName,
       sku: item.sku,
       name: item.name,
+      customSubtitle: item.customSubtitle || "",
+      category: item.category,
+      unit: item.unit,
+      imageUrl: item.imageUrl,
       isCustom: Boolean(item.isCustomMetadata),
     });
   };
@@ -190,15 +246,39 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
       return;
     }
 
-    const key = editingProduct.originalSku || editingProduct.originalName;
-    saveProductMetadata(key, {
-      customSku: trimmedSku !== editingProduct.originalSku ? trimmedSku : undefined,
-      customName: trimmedName !== editingProduct.originalName ? trimmedName : undefined,
-    });
+    const primaryKey = editingProduct.originalSku || editingProduct.originalName;
+    const aliasKeys = [
+      editingProduct.originalSku,
+      editingProduct.originalName,
+      editingProduct.sku,
+      editingProduct.name,
+      trimmedSku,
+      trimmedName,
+    ].filter(Boolean) as string[];
+
+    saveProductMetadata(
+      primaryKey,
+      {
+        customSku: trimmedSku !== editingProduct.originalSku ? trimmedSku : undefined,
+        customName: trimmedName !== editingProduct.originalName ? trimmedName : undefined,
+        customSubtitle: editingProduct.customSubtitle?.trim(),
+        category: editingProduct.category,
+        unit: editingProduct.unit?.trim(),
+      },
+      aliasKeys,
+    );
+
+    // אם הוזנה או נבחרה תמונה במודאל, נשמור גם אותה לכל המפתחות
+    if (editingProduct.imageUrl) {
+      saveCustomProductImage(aliasKeys, editingProduct.imageUrl);
+    }
 
     // אם המוצר בחוסר, נעדכן אוטומטית גם את כרזת החוסר המעוצבת לשם ולמק״ט החדשים
     const targetItem = sheetProducts.find(
-      (p) => p.originalSku === editingProduct.originalSku || p.sku === editingProduct.sku,
+      (p) =>
+        p.originalSku === editingProduct.originalSku ||
+        p.sku === editingProduct.sku ||
+        p.originalName === editingProduct.originalName,
     );
     if (
       targetItem &&
@@ -207,27 +287,61 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
       const posterSvgUrl = generateShortagePosterSvg({
         sku: trimmedSku,
         name: trimmedName,
-        category: targetItem.category,
+        category: editingProduct.category || targetItem.category,
         deficit:
           targetItem.deficitToRefill > 0 ? targetItem.deficitToRefill : targetItem.safetyThreshold,
-        unit: targetItem.unit,
+        unit: editingProduct.unit || targetItem.unit,
         safetyThreshold: targetItem.safetyThreshold,
         effectiveBalance: targetItem.effectiveBalance,
         isCritical: targetItem.isCritical,
       });
-      saveCustomShortagePoster(trimmedSku, posterSvgUrl);
+      saveCustomShortagePoster(aliasKeys, posterSvgUrl);
     }
 
-    showNotification(`עודכנו שם ומק״ט למוצר: "${trimmedName}" (${trimmedSku})`);
+    setImagesVersion((v) => v + 1);
+    showNotification(`עודכנו בהצלחה שם ומק״ט למוצר: "${trimmedName}" (${trimmedSku})!`);
     setEditingProduct(null);
   };
 
   const handleResetProductMetadata = () => {
     if (!editingProduct) return;
-    const key = editingProduct.originalSku || editingProduct.originalName;
-    resetProductMetadata(key);
+    const primaryKey = editingProduct.originalSku || editingProduct.originalName;
+    const aliasKeys = [
+      editingProduct.originalSku,
+      editingProduct.originalName,
+      editingProduct.sku,
+      editingProduct.name,
+    ].filter(Boolean) as string[];
+
+    resetProductMetadata(primaryKey, aliasKeys);
+    setImagesVersion((v) => v + 1);
     showNotification(`פרטי המוצר שוחזרו לברירת מחדל: ${editingProduct.originalName}`);
     setEditingProduct(null);
+  };
+
+  // טעינת תמונה מקובץ מחשב והמרתה ל-Base64 Data URL
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showNotification("נא לבחור קובץ תמונה תקין (JPG, PNG, WebP)");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        if (editingSkuUrl) {
+          setEditingSkuUrl((prev) => (prev ? { ...prev, url: base64 } : null));
+        } else if (editingProduct) {
+          setEditingProduct((prev) => (prev ? { ...prev, imageUrl: base64 } : null));
+        }
+        showNotification("התמונה הועלתה בהצלחה מהמחשב!");
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -469,6 +583,11 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
                         <h4 className="text-sm font-black text-foreground leading-snug line-clamp-2">
                           {product.cleanName}
                         </h4>
+                        {product.customSubtitle && (
+                          <span className="text-[11px] font-semibold text-primary/90 mt-0.5 line-clamp-1">
+                            {product.customSubtitle}
+                          </span>
+                        )}
                         <span className="text-[11px] text-muted-foreground mt-0.5">
                           {product.warehouseBranch} · סף ביטחון: {product.safetyThreshold}{" "}
                           {product.unit}
@@ -525,9 +644,17 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
                     </button>
 
                     <button
-                      onClick={() => setEditingSkuUrl({ sku: product.sku, url: product.imageUrl })}
+                      onClick={() =>
+                        setEditingSkuUrl({
+                          sku: product.sku,
+                          originalSku: product.originalSku,
+                          name: product.cleanName,
+                          originalName: product.originalName,
+                          url: product.imageUrl,
+                        })
+                      }
                       className="grid size-9 place-items-center rounded-xl border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition shrink-0"
-                      title="הגדר כתובת תמונה מותאמת"
+                      title="הגדר כתובת תמונה מותאמת או העלה קובץ"
                     >
                       <ExternalLink className="size-3.5" />
                     </button>
@@ -904,55 +1031,196 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
         </div>
       )}
 
-      {/* Modal: Edit Custom Image URL */}
+      {/* Modal: Edit Custom Image URL / Upload */}
       {editingSkuUrl && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-base font-black text-foreground">
-                הגדרת כתובת תמונה למק״ט {editingSkuUrl.sku}
-              </h4>
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-border/90 bg-card p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <ImageIcon className="size-4" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-foreground">
+                    הגדרת תמונה למוצר: {editingSkuUrl.name}
+                  </h4>
+                  <span className="text-xs font-mono font-bold text-primary">
+                    מק״ט: {editingSkuUrl.sku}
+                  </span>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setEditingSkuUrl(null)}
-                className="size-7 rounded-lg grid place-items-center hover:bg-secondary"
+                className="size-8 rounded-xl grid place-items-center hover:bg-secondary text-muted-foreground hover:text-foreground"
               >
-                <X className="size-4" />
+                <X className="size-5" />
               </button>
             </div>
 
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+
+            {/* Upload Option Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-dashed border-primary/50 bg-primary/5 hover:bg-primary/10 text-primary transition active:scale-98 text-right"
+              >
+                <div className="size-8 rounded-xl bg-primary/20 grid place-items-center shrink-0">
+                  <Upload className="size-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-black">העלאת קובץ מהמחשב</span>
+                  <span className="text-[10px] text-muted-foreground">JPG, PNG, WebP</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSkuUrl((prev) => (prev ? { ...prev, url: "" } : null));
+                }}
+                className="flex items-center gap-2.5 p-3 rounded-2xl border border-border bg-secondary/40 hover:bg-secondary text-muted-foreground hover:text-foreground transition text-right"
+              >
+                <div className="size-8 rounded-xl bg-secondary grid place-items-center shrink-0">
+                  <RotateCcw className="size-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-black">איפוס לברירת מחדל</span>
+                  <span className="text-[10px] text-muted-foreground">החזרת תמונת קטלוג</span>
+                </div>
+              </button>
+            </div>
+
+            {/* URL Input */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-muted-foreground">
-                כתובת אינטרנט של התמונה (Image URL):
+              <label className="text-xs font-bold text-foreground">
+                או הזן כתובת אינטרנט של תמונה (URL):
               </label>
               <input
                 type="url"
                 value={editingSkuUrl.url}
                 onChange={(e) => setEditingSkuUrl({ ...editingSkuUrl, url: e.target.value })}
-                placeholder="https://..."
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder="https://images.unsplash.com/..."
                 className="w-full h-10 px-3 rounded-xl border border-border bg-secondary/50 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
-            {editingSkuUrl.url && (
-              <div className="size-36 mx-auto rounded-xl overflow-hidden border border-border bg-black/20">
-                <img
-                  src={editingSkuUrl.url}
-                  alt="תצוגה מקדימה"
-                  className="h-full w-full object-cover"
-                />
+            {/* Preset High-Res Warehouse Images */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-bold text-muted-foreground">
+                תמונות קטלוג מובנות בחדות גבוהה לבחירה מהירה:
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    name: "מלט נשר 25 ק״ג",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["10002"],
+                  },
+                  {
+                    name: "בלה סומסום נקי",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["11511"],
+                  },
+                  {
+                    name: "בלה חול מחצבה",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["11501"],
+                  },
+                  {
+                    name: "טיט מוכן לבנייה",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["11551"],
+                  },
+                  {
+                    name: "בלוק איטונג / 20",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["18094"],
+                  },
+                  {
+                    name: "דבק ריצופית/קרמיקה",
+                    url: HIGH_RES_PRODUCT_CATALOG_IMAGES["60088"],
+                  },
+                ].map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() =>
+                      setEditingSkuUrl((prev) => (prev ? { ...prev, url: preset.url } : null))
+                    }
+                    className={cn(
+                      "flex flex-col items-center gap-1 p-1.5 rounded-xl border text-center transition hover:border-primary",
+                      editingSkuUrl.url === preset.url
+                        ? "border-primary bg-primary/10 ring-2 ring-primary/40"
+                        : "border-border/70 bg-card/60",
+                    )}
+                  >
+                    <div className="h-12 w-full rounded-lg overflow-hidden bg-black/40">
+                      <img
+                        src={preset.url}
+                        alt={preset.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold text-foreground truncate w-full">
+                      {preset.name}
+                    </span>
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* Image Preview */}
+            <div className="rounded-2xl border border-border/80 bg-black/40 p-3 flex items-center gap-4">
+              <div className="size-20 rounded-xl overflow-hidden border border-border bg-black/30 shrink-0">
+                {editingSkuUrl.url ? (
+                  <img
+                    src={editingSkuUrl.url}
+                    alt="תצוגה מקדימה"
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="h-full w-full grid place-items-center text-muted-foreground/40">
+                    <ImageIcon className="size-8" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-0.5 text-xs">
+                <span className="font-bold text-foreground">תצוגה מקדימה לתמונה</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {editingSkuUrl.url
+                    ? editingSkuUrl.url.startsWith("data:")
+                      ? "קובץ מקומי שמור בזיכרון (Data URL)"
+                      : "קישור אינטרנט ישיר לתמונה"
+                    : "טרם נבחרה תמונה (יוצג הקטלוג המקורי)"}
+                </span>
+              </div>
+            </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
               <button
+                type="button"
                 onClick={() => setEditingSkuUrl(null)}
                 className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-secondary"
               >
                 ביטול
               </button>
               <button
+                type="button"
                 onClick={handleSaveCustomImageUrl}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:bg-primary/90 shadow-sm"
+                className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:bg-primary/90 shadow-sm transition active:scale-95"
               >
                 שמור תמונה
               </button>
@@ -1034,24 +1302,33 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
         </div>
       )}
 
-      {/* Modal: Edit Product Name and SKU */}
+      {/* Modal: Edit Product Name, SKU, and Technical Specifications (Professional Editor) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl border border-border/90 bg-card p-6 shadow-2xl flex flex-col gap-5">
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl border border-border/90 bg-card p-6 shadow-2xl flex flex-col gap-5 max-h-[92vh] overflow-y-auto"
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
-                  <Pencil className="size-4" />
+                <div className="grid size-10 place-items-center rounded-2xl bg-primary/15 text-primary">
+                  <Pencil className="size-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-foreground">עריכת שם ומק״ט מוצר</h3>
+                  <h3 className="text-base font-black text-foreground">
+                    עריכת מוצר מקצועית — ח. סבן
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    הגדרה מותאמת אישית של כותרת המוצר והמק״ט המשודרים בשומרי המסך
+                    הגדרה מותאמת אישית של כותרת המוצר, מק״ט, מפרט טכני ואריזה
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingProduct(null)}
                 className="size-8 rounded-xl grid place-items-center hover:bg-secondary text-muted-foreground hover:text-foreground"
               >
@@ -1062,7 +1339,7 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
             {/* Baseline Info */}
             <div className="rounded-2xl border border-border/70 bg-secondary/40 p-3 text-xs flex flex-col gap-1">
               <span className="font-bold text-muted-foreground text-[11px]">
-                ערכי ברירת מחדל בקטלוג/גיליון:
+                ערכי מקור בגיליון הנתונים:
               </span>
               <div className="flex items-center justify-between font-mono text-[11px] text-foreground">
                 <span>
@@ -1074,51 +1351,171 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
               </div>
             </div>
 
-            {/* Inputs */}
+            {/* Inputs Container */}
             <div className="flex flex-col gap-4">
+              {/* Product Name Field (Supports Full Spacebar Typing) */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-foreground">
-                  שם מוצר לתצוגה בשומר מסך ובדשבורד:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground">
+                    שם מוצר לתצוגה בשומר מסך ובדשבורד:
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    רווחים ומלל חופשי נתמכים
+                  </span>
+                </div>
                 <input
                   type="text"
                   value={editingProduct.name}
                   onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  placeholder="הזן שם מוצר מעוצב..."
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  onKeyDown={(e) => {
+                    // בידוד מלא למניעת חסימת מקש הרווח
+                    e.stopPropagation();
+                  }}
+                  placeholder="הזן שם מוצר מקצועי (למשל: מלט נשר אפור 25 ק״ג)..."
+                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
                 />
-                <span className="text-[11px] text-muted-foreground">
-                  יוצג בכותרת שקופית המוצר, בכרזת החוסר ובהתראות הרכש
-                </span>
+
+                {/* Professional Quick Insertion Chips */}
+                <div className="flex flex-col gap-1 mt-1">
+                  <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                    <Tag className="size-3 text-primary" />
+                    <span>הוספה מהירה של מונחים מקצועיים לשם המוצר:</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      "25 ק״ג",
+                      "שק גדול (בלה)",
+                      "משטח 64 שק",
+                      "משטח 40 שק",
+                      "1 טון",
+                      "נשר",
+                      "איטונג",
+                      "תרמוקיר",
+                      "סילבונד",
+                      "ת״י 1924",
+                      "פורטלנד CEM II",
+                      "טיט מנופה",
+                      "בלוק 20",
+                      "בלוק 10",
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => {
+                          const currentName = editingProduct.name.trim();
+                          const newName = currentName ? `${currentName} ${chip}` : chip;
+                          setEditingProduct({ ...editingProduct, name: newName });
+                        }}
+                        className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-secondary hover:bg-primary/20 hover:text-primary border border-border transition active:scale-95 text-muted-foreground"
+                        title={`הוסף "${chip}" לשם המוצר`}
+                      >
+                        + {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
+              {/* SKU and Unit in 2 Columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground">מק״ט מוצר (SKU):</label>
+                  <input
+                    type="text"
+                    value={editingProduct.sku}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="הזן מק״ט (למשל: 10002)..."
+                    className="w-full h-10 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-mono font-black text-primary focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground">יחידת מידה:</label>
+                  <select
+                    value={editingProduct.unit || "שק"}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-border bg-secondary/60 text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="שק">שק</option>
+                    <option value="בלות">בלות (שקי ענק)</option>
+                    <option value="יח'">יח' (יחידות)</option>
+                    <option value="משטח">משטח</option>
+                    <option value="קוב">קוב</option>
+                    <option value="טון">טון</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Technical Subtitle / Packaging Spec */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-foreground">מק״ט מוצר (SKU):</label>
+                <label className="text-xs font-bold text-foreground">
+                  מפרט טכני / אריזה למסך (כותרת משנה):
+                </label>
                 <input
                   type="text"
-                  value={editingProduct.sku}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                  placeholder="הזן מק״ט (למשל: 11110)..."
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-mono font-black text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={editingProduct.customSubtitle || ""}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, customSubtitle: e.target.value })
+                  }
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="למשל: משטח תקני 64 שקים | תו תקן ישראלי 1924..."
+                  className="w-full h-10 px-3.5 rounded-xl border border-border bg-secondary/60 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
                 />
-                <span className="text-[11px] text-muted-foreground">
-                  מספר המק״ט המודגש בתיבה הטכנולוגית בשומר המסך ובכרזת החוסר
-                </span>
+              </div>
+
+              {/* Category Picker */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground">קטגוריית חומר:</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: "cement", label: "מלט וטיט" },
+                    { id: "big_bag", label: "שקי ענק (בלה)" },
+                    { id: "block", label: "בלוקים ואיטונג" },
+                    { id: "dry_mix", label: "דבקים ותערובות" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() =>
+                        setEditingProduct({
+                          ...editingProduct,
+                          category: cat.id as SheetProductItem["category"],
+                        })
+                      }
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-xl border text-xs font-bold transition text-center",
+                        editingProduct.category === cat.id
+                          ? "bg-primary/20 border-primary text-primary shadow-sm"
+                          : "bg-secondary/40 border-border text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      )}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Live Preview Widget */}
-            <div className="rounded-2xl border border-border/80 bg-black/40 p-3.5 flex flex-col gap-1.5">
+            {/* Live Preview Widget Matching ScreenSaver */}
+            <div className="rounded-2xl border border-border/80 bg-black/50 p-3.5 flex flex-col gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                תצוגה מקדימה כפי שתופיע על המסך:
+                תצוגה מקדימה כפי שתופיע בשומר המסך:
               </span>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="rounded-lg bg-black/90 border border-primary/70 px-2.5 py-1 text-xs font-mono font-black text-primary shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="rounded-lg bg-black/90 border border-primary/70 px-2.5 py-1 text-xs font-mono font-black text-primary shadow-sm shrink-0">
                   מק״ט: {editingProduct.sku || "—"}
                 </span>
-                <span className="text-sm font-black text-foreground">
-                  {editingProduct.name || "שם מוצר"}
-                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-black text-foreground truncate">
+                    {editingProduct.name || "שם מוצר לדוגמה"}
+                  </span>
+                  {editingProduct.customSubtitle && (
+                    <span className="text-[11px] font-semibold text-primary/90 truncate">
+                      {editingProduct.customSubtitle}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1126,6 +1523,7 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
             <div className="flex items-center justify-between pt-3 border-t border-border/80">
               {editingProduct.isCustom ? (
                 <button
+                  type="button"
                   onClick={handleResetProductMetadata}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition"
                   title="שחזר שם ומק״ט מקוריים מברירת המחדל"
@@ -1139,12 +1537,14 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setEditingProduct(null)}
                   className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground transition"
                 >
                   ביטול
                 </button>
                 <button
+                  type="button"
                   onClick={handleSaveProductMetadata}
                   className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:bg-primary/90 shadow-md shadow-primary/20 transition active:scale-95"
                 >
