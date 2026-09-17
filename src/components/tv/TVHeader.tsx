@@ -12,6 +12,7 @@ import {
   Settings2,
   Smartphone,
   Truck,
+  Tv,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -271,6 +272,18 @@ export function TVHeader({
             <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
           </button>
         )}
+
+        {/* Saban Lobby Showcase & Store TV Button */}
+        <a
+          href="/lobby"
+          target="_blank"
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-950/80 to-stone-900 hover:from-amber-900 hover:to-stone-800 border border-amber-500/40 px-3 py-2 text-xs font-bold text-amber-200 transition-all shadow-sm group"
+          title="פתח מסך שילוט לובי, תצוגת מוצרים ומבצעים לטלוויזיה (ח. סבן)"
+        >
+          <Tv className="size-4 text-amber-400 group-hover:scale-110 transition-transform" />
+          <span>שילוט לובי</span>
+          <span className="size-2 rounded-full bg-amber-400 animate-ping" />
+        </a>
 
         {/* Admin Control Plane Link */}
         <a

@@ -49,6 +49,38 @@ export function StudioDrawer() {
             </header>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-4">
+              {/* Quick Navigation to Lobby & Slide Admin */}
+              <div className="rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-950/40 to-slate-900/60 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="size-2 rounded-full bg-amber-400 animate-ping" />
+                    <span className="text-xs font-black text-amber-300">שילוט לובי וחנות</span>
+                  </div>
+                  <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-400">
+                    PIN: 1994
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href="/lobby-admin"
+                    className="flex flex-col items-start rounded-xl border border-stone-700 bg-stone-900/90 p-2.5 transition hover:border-sky-500 hover:bg-sky-950/40"
+                  >
+                    <span className="text-xs font-black text-white">עריכת שקופיות</span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">קטלוג, מבצעים וטיימר</span>
+                  </a>
+
+                  <a
+                    href="/lobby"
+                    target="_blank"
+                    className="flex flex-col items-start rounded-xl border border-stone-700 bg-stone-900/90 p-2.5 transition hover:border-amber-500 hover:bg-amber-950/40"
+                  >
+                    <span className="text-xs font-black text-white">שידור TV חי</span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">פתיחת מסך שילוט מלא</span>
+                  </a>
+                </div>
+              </div>
+
               <AITrainerStudio />
               <BroadcastControl />
               <QuickTemplates />

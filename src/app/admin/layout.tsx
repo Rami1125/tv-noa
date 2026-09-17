@@ -62,6 +62,13 @@ export const ADMIN_NAV_ITEMS = [
     description: "סרטוני Drive, מצגות ותזמון הפסקות",
   },
   {
+    path: "/lobby-admin",
+    label: "עריכת שקופיות לובי וחנות",
+    icon: Sparkles,
+    badge: "1994",
+    description: "ניהול מוצרים, מבצעים, טיימרים וסימולטור TV",
+  },
+  {
     path: "/admin/overrides",
     label: "שידור מבצעי בזק",
     icon: Radio,

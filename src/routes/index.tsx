@@ -15,6 +15,9 @@ import { StudioDrawer } from "@/components/studio/StudioDrawer";
 import { DispatchScreensaver } from "@/components/screensaver/DispatchScreensaver";
 import { PickerView } from "@/components/mobile/PickerView";
 import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
+import { LobbySignageOrchestrator } from "@/components/lobby/LobbySignageOrchestrator";
+import { LobbyAdminView } from "@/components/lobby/LobbyAdminView";
+import { ProductLandingView } from "@/components/store/ProductLandingView";
 import { splitOrdersForBoard } from "@/services/dispatchArchiveService";
 import type { Order } from "@/types/dispatch";
 
@@ -79,16 +82,34 @@ function LiveBoard() {
     stopSpeakingVoice,
   } = useDispatchBoard();
 
-  const [viewMode, setViewMode] = useState<"tv" | "picker">("tv");
+  const [viewMode, setViewMode] = useState<"tv" | "picker" | "lobby" | "lobby-admin" | "product">(
+    "tv",
+  );
+  const [productSkuParam, setProductSkuParam] = useState<string>("");
   const [isTrafficOpen, setIsTrafficOpen] = useState(false);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
-      const modeParam = urlParams.get("mode");
+      const modeParam = urlParams.get("mode") || urlParams.get("view");
       const pickerParam = urlParams.get("picker");
       const trafficParam = urlParams.get("traffic");
+      const skuParam = urlParams.get("sku");
+
+      if (skuParam || modeParam === "product") {
+        setProductSkuParam(skuParam || "SBN-110");
+        setViewMode("product");
+        return;
+      }
+      if (modeParam === "lobby") {
+        setViewMode("lobby");
+        return;
+      }
+      if (modeParam === "lobby-admin") {
+        setViewMode("lobby-admin");
+        return;
+      }
       if (trafficParam === "1" || trafficParam === "true" || modeParam === "traffic") {
         setIsTrafficOpen(true);
       }
@@ -113,9 +134,9 @@ function LiveBoard() {
     }
   }, []);
 
-  const handleSetViewMode = (mode: "tv" | "picker") => {
+  const handleSetViewMode = (mode: "tv" | "picker" | "lobby" | "lobby-admin" | "product") => {
     setViewMode(mode);
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && (mode === "picker" || mode === "tv")) {
       localStorage.setItem("saban_view_mode", mode);
     }
   };
@@ -147,6 +168,30 @@ function LiveBoard() {
       <div dir="rtl" className="min-h-screen bg-slate-950">
         <PickerView onSwitchToTv={() => handleSetViewMode("tv")} />
       </div>
+    );
+  }
+
+  if (viewMode === "lobby") {
+    return (
+      <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#FDFBF7]">
+        <LobbySignageOrchestrator
+          isStandalone
+          onOpenSettings={() => handleSetViewMode("lobby-admin")}
+        />
+      </div>
+    );
+  }
+
+  if (viewMode === "lobby-admin") {
+    return <LobbyAdminView />;
+  }
+
+  if (viewMode === "product") {
+    return (
+      <ProductLandingView
+        sku={productSkuParam || "SBN-110"}
+        onBack={() => handleSetViewMode("tv")}
+      />
     );
   }
 
