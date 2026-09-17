@@ -25,6 +25,7 @@ import {
   Check,
   X,
   Palette,
+  Pencil,
 } from "lucide-react";
 import { useAdminControl } from "@/context/AdminControlContext";
 import { useDispatchBoard } from "@/context/DispatchContext";
@@ -35,6 +36,8 @@ import {
   saveCustomProductImage,
   saveCustomShortagePoster,
   resetCustomProductImages,
+  saveProductMetadata,
+  resetProductMetadata,
   SheetProductItem,
 } from "@/services/productImageService";
 import { cn } from "@/lib/utils";
@@ -64,6 +67,13 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
   const [filterMode, setFilterMode] = useState<"all" | "shortage" | "custom">("all");
   const [previewItem, setPreviewItem] = useState<SheetProductItem | null>(null);
   const [editingSkuUrl, setEditingSkuUrl] = useState<{ sku: string; url: string } | null>(null);
+  const [editingProduct, setEditingProduct] = useState<{
+    originalSku: string;
+    originalName: string;
+    sku: string;
+    name: string;
+    isCustom: boolean;
+  } | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
   const showNotification = (msg: string) => {
@@ -158,6 +168,66 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
       resetCustomProductImages();
       showNotification("כל התמונות המותאמות אופסו לברירת מחדל");
     }
+  };
+
+  const handleOpenEditProduct = (item: SheetProductItem) => {
+    setEditingProduct({
+      originalSku: item.originalSku,
+      originalName: item.originalName,
+      sku: item.sku,
+      name: item.name,
+      isCustom: Boolean(item.isCustomMetadata),
+    });
+  };
+
+  const handleSaveProductMetadata = () => {
+    if (!editingProduct) return;
+    const trimmedSku = editingProduct.sku.trim();
+    const trimmedName = editingProduct.name.trim();
+
+    if (!trimmedSku || !trimmedName) {
+      showNotification("נא להזין שם מוצר ומק״ט תקינים");
+      return;
+    }
+
+    const key = editingProduct.originalSku || editingProduct.originalName;
+    saveProductMetadata(key, {
+      customSku: trimmedSku !== editingProduct.originalSku ? trimmedSku : undefined,
+      customName: trimmedName !== editingProduct.originalName ? trimmedName : undefined,
+    });
+
+    // אם המוצר בחוסר, נעדכן אוטומטית גם את כרזת החוסר המעוצבת לשם ולמק״ט החדשים
+    const targetItem = sheetProducts.find(
+      (p) => p.originalSku === editingProduct.originalSku || p.sku === editingProduct.sku,
+    );
+    if (
+      targetItem &&
+      (targetItem.isCritical || targetItem.isWarning || targetItem.deficitToRefill > 0)
+    ) {
+      const posterSvgUrl = generateShortagePosterSvg({
+        sku: trimmedSku,
+        name: trimmedName,
+        category: targetItem.category,
+        deficit:
+          targetItem.deficitToRefill > 0 ? targetItem.deficitToRefill : targetItem.safetyThreshold,
+        unit: targetItem.unit,
+        safetyThreshold: targetItem.safetyThreshold,
+        effectiveBalance: targetItem.effectiveBalance,
+        isCritical: targetItem.isCritical,
+      });
+      saveCustomShortagePoster(trimmedSku, posterSvgUrl);
+    }
+
+    showNotification(`עודכנו שם ומק״ט למוצר: "${trimmedName}" (${trimmedSku})`);
+    setEditingProduct(null);
+  };
+
+  const handleResetProductMetadata = () => {
+    if (!editingProduct) return;
+    const key = editingProduct.originalSku || editingProduct.originalName;
+    resetProductMetadata(key);
+    showNotification(`פרטי המוצר שוחזרו לברירת מחדל: ${editingProduct.originalName}`);
+    setEditingProduct(null);
   };
 
   return (
@@ -359,25 +429,41 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
 
                       <div className="flex flex-col flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className="rounded-lg bg-black/70 border border-primary/60 px-2 py-0.5 text-[11px] font-mono font-black text-primary">
-                            מק״ט: {product.sku}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[10px] font-black px-2 py-0.5 rounded-md border",
-                              product.isCritical
-                                ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
-                                : product.isWarning
-                                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                                  : "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="rounded-lg bg-black/70 border border-primary/60 px-2 py-0.5 text-[11px] font-mono font-black text-primary">
+                              מק״ט: {product.sku}
+                            </span>
+                            {product.isCustomMetadata && (
+                              <span className="rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
+                                נערך
+                              </span>
                             )}
-                          >
-                            {product.isCritical
-                              ? "חוסר קריטי"
-                              : product.isWarning
-                                ? "אזהרת מלאי"
-                                : "תקין"}
-                          </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEditProduct(product)}
+                              className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-secondary transition"
+                              title="ערוך שם מוצר ומק״ט"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <span
+                              className={cn(
+                                "text-[10px] font-black px-2 py-0.5 rounded-md border",
+                                product.isCritical
+                                  ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                                  : product.isWarning
+                                    ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                                    : "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+                              )}
+                            >
+                              {product.isCritical
+                                ? "חוסר קריטי"
+                                : product.isWarning
+                                  ? "אזהרת מלאי"
+                                  : "תקין"}
+                            </span>
+                          </div>
                         </div>
 
                         <h4 className="text-sm font-black text-foreground leading-snug line-clamp-2">
@@ -421,17 +507,26 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/60">
                     <button
+                      onClick={() => handleOpenEditProduct(product)}
+                      className="flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-xl border border-border bg-card hover:bg-secondary text-foreground text-xs font-bold transition active:scale-95 shadow-sm shrink-0"
+                      title="ערוך שם מוצר ומק״ט"
+                    >
+                      <Pencil className="size-3.5 text-primary" />
+                      <span>ערוך שם/מק״ט</span>
+                    </button>
+
+                    <button
                       onClick={() => handleGenerateShortagePoster(product)}
                       className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/40 text-primary text-xs font-black transition active:scale-95 shadow-sm"
                       title="צור כרזת חוסר מעוצבת עם מק״ט ושם מוצר מוגדל"
                     >
                       <Palette className="size-3.5" />
-                      <span>צור כרזת חוסר מעוצבת</span>
+                      <span>כרזת חוסר</span>
                     </button>
 
                     <button
                       onClick={() => setEditingSkuUrl({ sku: product.sku, url: product.imageUrl })}
-                      className="grid size-9 place-items-center rounded-xl border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition"
+                      className="grid size-9 place-items-center rounded-xl border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition shrink-0"
                       title="הגדר כתובת תמונה מותאמת"
                     >
                       <ExternalLink className="size-3.5" />
@@ -439,7 +534,7 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
 
                     <button
                       onClick={() => setPreviewItem(product)}
-                      className="grid size-9 place-items-center rounded-xl border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition"
+                      className="grid size-9 place-items-center rounded-xl border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground transition shrink-0"
                       title="תצוגה מקדימה מלאה"
                     >
                       <Eye className="size-3.5" />
@@ -908,6 +1003,17 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
+                    const itemToEdit = previewItem;
+                    setPreviewItem(null);
+                    handleOpenEditProduct(itemToEdit);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold hover:bg-secondary text-foreground transition"
+                >
+                  <Pencil className="size-3.5 text-primary" />
+                  <span>ערוך שם ומק״ט</span>
+                </button>
+                <button
+                  onClick={() => {
                     handleGenerateShortagePoster(previewItem);
                     setPreviewItem(null);
                   }}
@@ -921,6 +1027,129 @@ export function ScreensaverAdminPanel({ onClose }: ScreensaverAdminPanelProps) {
                   className="px-4 py-2 rounded-xl border border-border text-xs font-bold hover:bg-secondary"
                 >
                   סגור
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Product Name and SKU */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-border/90 bg-card p-6 shadow-2xl flex flex-col gap-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <Pencil className="size-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">עריכת שם ומק״ט מוצר</h3>
+                  <p className="text-xs text-muted-foreground">
+                    הגדרה מותאמת אישית של כותרת המוצר והמק״ט המשודרים בשומרי המסך
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingProduct(null)}
+                className="size-8 rounded-xl grid place-items-center hover:bg-secondary text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {/* Baseline Info */}
+            <div className="rounded-2xl border border-border/70 bg-secondary/40 p-3 text-xs flex flex-col gap-1">
+              <span className="font-bold text-muted-foreground text-[11px]">
+                ערכי ברירת מחדל בקטלוג/גיליון:
+              </span>
+              <div className="flex items-center justify-between font-mono text-[11px] text-foreground">
+                <span>
+                  מק״ט מקורי: <strong className="text-primary">{editingProduct.originalSku}</strong>
+                </span>
+                <span>
+                  שם מקורי: <strong>{editingProduct.originalName}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground">
+                  שם מוצר לתצוגה בשומר מסך ובדשבורד:
+                </label>
+                <input
+                  type="text"
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  placeholder="הזן שם מוצר מעוצב..."
+                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  יוצג בכותרת שקופית המוצר, בכרזת החוסר ובהתראות הרכש
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground">מק״ט מוצר (SKU):</label>
+                <input
+                  type="text"
+                  value={editingProduct.sku}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                  placeholder="הזן מק״ט (למשל: 11110)..."
+                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-secondary/60 text-sm font-mono font-black text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  מספר המק״ט המודגש בתיבה הטכנולוגית בשומר המסך ובכרזת החוסר
+                </span>
+              </div>
+            </div>
+
+            {/* Live Preview Widget */}
+            <div className="rounded-2xl border border-border/80 bg-black/40 p-3.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                תצוגה מקדימה כפי שתופיע על המסך:
+              </span>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="rounded-lg bg-black/90 border border-primary/70 px-2.5 py-1 text-xs font-mono font-black text-primary shadow-sm">
+                  מק״ט: {editingProduct.sku || "—"}
+                </span>
+                <span className="text-sm font-black text-foreground">
+                  {editingProduct.name || "שם מוצר"}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-border/80">
+              {editingProduct.isCustom ? (
+                <button
+                  onClick={handleResetProductMetadata}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition"
+                  title="שחזר שם ומק״ט מקוריים מברירת המחדל"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>שחזר ערכי מקור</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditingProduct(null)}
+                  className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground transition"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={handleSaveProductMetadata}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:bg-primary/90 shadow-md shadow-primary/20 transition active:scale-95"
+                >
+                  <Check className="size-4" />
+                  <span>שמור שינויים</span>
                 </button>
               </div>
             </div>

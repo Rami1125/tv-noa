@@ -25,7 +25,7 @@ import {
   evaluateItemStock,
   parseColumnHProductText,
 } from "@/services/analyticsService";
-import { resolveProductImage } from "@/services/productImageService";
+import { resolveProductImage, getStoredProductMetadata } from "@/services/productImageService";
 
 // ערך בסיס גלובלי לפתיחת מלאי - 5,000 יחידות כדי למנוע התראות קריטיות שגויות
 export const GLOBAL_INITIAL_STOCK_BASE = 500;
@@ -662,16 +662,24 @@ export function getNormalizedProductSlideItems(
   const branchNumber: 1 | 4 | "all" =
     branchFilter === "branch_4" ? 4 : branchFilter === "branch_1" ? 1 : "all";
 
+  const customMetadata = getStoredProductMetadata();
+
   const result: NormalizedProductSlideItem[] = items.map((it) => {
-    const unitsPerPallet = getUnitsPerPallet(it.rule.category, it.rule.name);
-    const skuKey = it.rule.sku || "";
+    const originalSku = it.rule.sku || it.rule.id;
+    const originalName = it.rule.name;
+    const meta = customMetadata[originalSku] || customMetadata[originalName];
+    const effectiveSku = meta?.customSku?.trim() || originalSku;
+    const effectiveName = meta?.customName?.trim() || originalName;
+
+    const unitsPerPallet = getUnitsPerPallet(it.rule.category, effectiveName);
+    const skuKey = effectiveSku || "";
     const isShortage =
       it.isCritical || (it.deficitToRefill > 0 && it.effectiveBalance <= it.rule.safetyThreshold);
     const imageUrl = resolveProductImage(
       skuKey,
       it.rule.category,
       isShortage,
-      it.rule.name,
+      effectiveName,
       it.deficitToRefill,
       it.rule.unit,
       it.rule.safetyThreshold,
@@ -688,16 +696,18 @@ export function getNormalizedProductSlideItems(
         : "מלאי רצפה תקין ומעל סף הביטחון";
 
     const ordersCount = orders.filter((o) => {
-      if (it.rule.sku && o.itemsFormatted?.includes(it.rule.sku)) return true;
-      if (o.itemsFormatted?.includes(it.rule.name.slice(0, 8))) return true;
+      if (effectiveSku && o.itemsFormatted?.includes(effectiveSku)) return true;
+      if (originalSku && o.itemsFormatted?.includes(originalSku)) return true;
+      if (o.itemsFormatted?.includes(effectiveName.slice(0, 8))) return true;
+      if (o.itemsFormatted?.includes(originalName.slice(0, 8))) return true;
       if (it.rule.category === "big_bag" && (o.logisticsMetrics?.bellaBags ?? 0) > 0) return true;
       return false;
     }).length;
 
     return {
-      sku: it.rule.sku || it.rule.id,
-      cleanName: it.rule.name,
-      originalName: it.rule.name,
+      sku: effectiveSku,
+      cleanName: effectiveName,
+      originalName: originalName,
       category: it.rule.category,
       unit: it.rule.unit,
       unitsPerPallet,

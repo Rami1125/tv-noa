@@ -21,11 +21,21 @@ import { getUnitsPerPallet } from "@/services/inventoryService";
 
 const STORAGE_CUSTOM_IMAGES_KEY = "saban_custom_product_images_v2";
 const STORAGE_SHORTAGE_POSTERS_KEY = "saban_shortage_posters_v2";
+const STORAGE_CUSTOM_METADATA_KEY = "saban_custom_product_metadata_v2";
+
+export interface CustomProductMetadata {
+  customSku?: string;
+  customName?: string;
+  updatedAt?: string;
+}
 
 export interface SheetProductItem {
   sku: string;
+  originalSku: string;
   name: string;
+  originalName: string;
   cleanName: string;
+  isCustomMetadata?: boolean;
   category: "cement" | "big_bag" | "block" | "dry_mix" | "other";
   unit: string;
   initialBase: number;
@@ -358,6 +368,68 @@ export function resetCustomProductImages(): void {
 }
 
 /**
+ * קבלת מפת שמות ומק״טים מותאמים אישית מ-LocalStorage
+ */
+export function getStoredProductMetadata(): Record<string, CustomProductMetadata> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOM_METADATA_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * שמירת שם מוצר ומק״ט מותאמים אישית (נשמר לפי המק״ט/מזהה המקורי)
+ */
+export function saveProductMetadata(
+  originalSkuOrId: string,
+  data: { customSku?: string; customName?: string },
+): void {
+  if (typeof window === "undefined" || !originalSkuOrId) return;
+  try {
+    const current = getStoredProductMetadata();
+    const customSku = data.customSku?.trim();
+    const customName = data.customName?.trim();
+
+    current[originalSkuOrId] = {
+      customSku: customSku ? customSku : undefined,
+      customName: customName ? customName : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(STORAGE_CUSTOM_METADATA_KEY, JSON.stringify(current));
+    window.dispatchEvent(
+      new CustomEvent("saban-product-images-updated", {
+        detail: { originalSkuOrId, customSku, customName },
+      }),
+    );
+  } catch (err) {
+    console.error("Failed to save product metadata:", err);
+  }
+}
+
+/**
+ * שחזור פרטי מוצר (שם ומק״ט) לברירת מחדל
+ */
+export function resetProductMetadata(originalSkuOrId: string): void {
+  if (typeof window === "undefined" || !originalSkuOrId) return;
+  try {
+    const current = getStoredProductMetadata();
+    delete current[originalSkuOrId];
+    localStorage.setItem(STORAGE_CUSTOM_METADATA_KEY, JSON.stringify(current));
+    window.dispatchEvent(
+      new CustomEvent("saban-product-images-updated", {
+        detail: { originalSkuOrId, reset: true },
+      }),
+    );
+  } catch (err) {
+    console.error("Failed to reset product metadata:", err);
+  }
+}
+
+/**
  * קבלת התמונה המתאימה למוצר — לוקח בחשבון האם המוצר בחוסר
  */
 export function resolveProductImage(
@@ -419,6 +491,7 @@ export function extractProductsFromSheetOrders(
 ): SheetProductItem[] {
   const customImages = getStoredCustomProductImages();
   const shortagePosters = getStoredShortagePosters();
+  const customMetadata = getStoredProductMetadata();
 
   // 1. צבירת כמויות משיכה מההזמנות
   const demandedMap = new Map<
@@ -466,9 +539,20 @@ export function extractProductsFromSheetOrders(
 
   // 2. איחוד עם מוצרי הבסיס המוגדרים בקטלוג
   const results: SheetProductItem[] = PREDEFINED_SAFETY_STOCKS.map((rule) => {
-    const sku = rule.sku || rule.productName;
-    const usage = demandedMap.get(sku) ||
-      demandedMap.get(rule.productName) || {
+    const originalSku = rule.sku || rule.productName;
+    const originalName = rule.productName;
+    const meta = customMetadata[originalSku] || customMetadata[originalName];
+    const effectiveSku = meta?.customSku?.trim() || originalSku;
+    const effectiveName = meta?.customName?.trim() || originalName;
+    const isCustomMetadata = Boolean(
+      (meta?.customSku && meta.customSku.trim() !== originalSku) ||
+      (meta?.customName && meta.customName.trim() !== originalName),
+    );
+
+    const usage = demandedMap.get(effectiveSku) ||
+      demandedMap.get(originalSku) ||
+      demandedMap.get(effectiveName) ||
+      demandedMap.get(originalName) || {
         actualDrawn: 0,
         reserved: 0,
         ordersCount: 0,
@@ -494,19 +578,23 @@ export function extractProductsFromSheetOrders(
     const palletsToRefill =
       deficitToRefill > 0 ? Math.max(1, Math.ceil(deficitToRefill / unitsPerPallet)) : 0;
 
-    const isCustomImage = Boolean(customImages[sku]);
+    const isCustomImage = Boolean(customImages[effectiveSku] || customImages[originalSku]);
     const imageUrl =
-      customImages[sku] ||
-      HIGH_RES_PRODUCT_CATALOG_IMAGES[sku] ||
-      PRODUCT_IMAGES[sku] ||
+      customImages[effectiveSku] ||
+      customImages[originalSku] ||
+      HIGH_RES_PRODUCT_CATALOG_IMAGES[effectiveSku] ||
+      HIGH_RES_PRODUCT_CATALOG_IMAGES[originalSku] ||
+      PRODUCT_IMAGES[effectiveSku] ||
+      PRODUCT_IMAGES[originalSku] ||
       PRODUCT_IMAGES[rule.category] ||
       PRODUCT_IMAGES.default;
 
     const shortagePosterUrl =
-      shortagePosters[sku] ||
+      shortagePosters[effectiveSku] ||
+      shortagePosters[originalSku] ||
       generateShortagePosterSvg({
-        sku,
-        name: rule.productName,
+        sku: effectiveSku,
+        name: effectiveName,
         category: rule.category,
         deficit: deficitToRefill,
         unit: rule.unit,
@@ -516,9 +604,12 @@ export function extractProductsFromSheetOrders(
       });
 
     return {
-      sku,
-      name: rule.productName,
-      cleanName: rule.productName,
+      sku: effectiveSku,
+      originalSku,
+      name: effectiveName,
+      originalName,
+      cleanName: effectiveName,
+      isCustomMetadata,
       category: rule.category,
       unit: rule.unit,
       initialBase,
