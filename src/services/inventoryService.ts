@@ -25,6 +25,7 @@ import {
   evaluateItemStock,
   parseColumnHProductText,
 } from "@/services/analyticsService";
+import { resolveProductImage } from "@/services/productImageService";
 
 // ערך בסיס גלובלי לפתיחת מלאי - 5,000 יחידות כדי למנוע התראות קריטיות שגויות
 export const GLOBAL_INITIAL_STOCK_BASE = 500;
@@ -391,7 +392,7 @@ function filterOrdersByBranch(orders: Order[], branchFilter: ScreensaverBranchFi
   return orders;
 }
 
-function getUnitsPerPallet(category: string, name: string): number {
+export function getUnitsPerPallet(category: string, name: string): number {
   const n = name.toLowerCase();
   if (/מלט/i.test(n)) return 40;
   if (/דבק|טיח|שפכטל|ספירבונד|ביג גב/i.test(n)) return 40;
@@ -664,8 +665,18 @@ export function getNormalizedProductSlideItems(
   const result: NormalizedProductSlideItem[] = items.map((it) => {
     const unitsPerPallet = getUnitsPerPallet(it.rule.category, it.rule.name);
     const skuKey = it.rule.sku || "";
-    const imageUrl =
-      PRODUCT_IMAGES[skuKey] || PRODUCT_IMAGES[it.rule.category] || PRODUCT_IMAGES.default;
+    const isShortage =
+      it.isCritical || (it.deficitToRefill > 0 && it.effectiveBalance <= it.rule.safetyThreshold);
+    const imageUrl = resolveProductImage(
+      skuKey,
+      it.rule.category,
+      isShortage,
+      it.rule.name,
+      it.deficitToRefill,
+      it.rule.unit,
+      it.rule.safetyThreshold,
+      it.effectiveBalance,
+    );
 
     const requiresFullTrailer =
       it.palletsToRefill >= 20 || (it.rule.category === "big_bag" && it.deficitToRefill >= 14);

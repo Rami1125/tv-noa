@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Warehouse,
@@ -155,6 +155,7 @@ export function HarashWarehouseApp({
   });
 
   // מזהי הזמנות שכבר טופלו או נסגרו - שמור בזיכרון מקומי ומונע לולאת תקיעה
+  const dismissedRef = useRef<Set<string>>(getDismissedSumsumAlerts());
   const [dismissedAlertOrderIds, setDismissedAlertOrderIds] = useState<Set<string>>(() =>
     getDismissedSumsumAlerts(),
   );
@@ -169,7 +170,8 @@ export function HarashWarehouseApp({
 
     for (const order of harashOrders) {
       const orderId = String(order?.orderId || (order as OrderWithLegacyFields)?.id || "");
-      if (!orderId || dismissedAlertOrderIds.has(orderId)) continue;
+      if (!orderId || dismissedRef.current.has(orderId) || dismissedAlertOrderIds.has(orderId))
+        continue;
 
       const itemsText = Array.isArray(order?.items)
         ? order.items.map((i) => i?.name || "").join(" ")
@@ -191,10 +193,29 @@ export function HarashWarehouseApp({
     }
   }, [harashOrders, dismissedAlertOrderIds, activeAlert]);
 
-  const handleDismissAlert = (orderId: string) => {
+  const handleDismissAlert = (orderId?: string) => {
+    const idToDismiss = String(orderId || activeAlert?.orderId || "all");
+    dismissedRef.current.add(idToDismiss);
     setDismissedAlertOrderIds((prev) => {
       const next = new Set(prev);
-      next.add(orderId);
+      next.add(idToDismiss);
+      saveDismissedSumsumAlerts(next);
+      return next;
+    });
+    setActiveAlert(null);
+  };
+
+  const handleDismissAllAlerts = () => {
+    harashOrders.forEach((o) => {
+      const oId = String(o?.orderId || (o as OrderWithLegacyFields)?.id || "");
+      if (oId) dismissedRef.current.add(oId);
+    });
+    setDismissedAlertOrderIds((prev) => {
+      const next = new Set(prev);
+      harashOrders.forEach((o) => {
+        const oId = String(o?.orderId || (o as OrderWithLegacyFields)?.id || "");
+        if (oId) next.add(oId);
+      });
       saveDismissedSumsumAlerts(next);
       return next;
     });
@@ -363,6 +384,13 @@ export function HarashWarehouseApp({
                   className="w-full h-10 rounded-xl bg-white/15 text-white font-bold text-xs hover:bg-white/20 active:scale-95 transition"
                 >
                   התעלם וסגור
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissAllAlerts}
+                  className="w-full h-8 text-[11px] text-rose-300/80 hover:text-white underline underline-offset-2 transition"
+                >
+                  השתק את כל התראות העומס להיום
                 </button>
               </div>
             </motion.div>

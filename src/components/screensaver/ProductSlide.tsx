@@ -21,6 +21,7 @@ import {
 import type { Order } from "@/types/dispatch";
 import type { NormalizedProductSlideItem, ScreensaverBranchFilter } from "@/types/screensaver";
 import { getNormalizedProductSlideItems } from "@/services/inventoryService";
+import { generateShortagePosterSvg, resolveProductImage } from "@/services/productImageService";
 import { cn } from "@/lib/utils";
 
 interface ProductSlideProps {
@@ -45,11 +46,20 @@ export function ProductSlide({
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({});
+  const [imagesVersion, setImagesVersion] = useState(0);
+
+  // האזנה לעדכון תמונות מלוח הבקרה של המנהל
+  useEffect(() => {
+    const handleImageUpdate = () => setImagesVersion((v) => v + 1);
+    window.addEventListener("saban-product-images-updated", handleImageUpdate);
+    return () => window.removeEventListener("saban-product-images-updated", handleImageUpdate);
+  }, []);
 
   // חילוץ וחישוב פריטי המלאי המנורמלים בזמן אמת
   const items: NormalizedProductSlideItem[] = useMemo(() => {
+    void imagesVersion; // Trigger re-calculation when images are updated in admin panel
     return getNormalizedProductSlideItems(orders, branchFilter, prioritizeCritical);
-  }, [orders, branchFilter, prioritizeCritical]);
+  }, [orders, branchFilter, prioritizeCritical, imagesVersion]);
 
   // איפוס בטוח של האינדקס אם רשימת הפריטים התקצרה עקב שינוי סינון
   useEffect(() => {
@@ -60,7 +70,7 @@ export function ProductSlide({
   }, [items.length, currentIndex]);
 
   // פריט נוכחי מאובטח
-  const currentItem = items[currentIndex] || items[0];
+  const currentItem: NormalizedProductSlideItem | undefined = items[currentIndex] || items[0];
 
   const handleNext = useCallback(() => {
     if (items.length <= 1) return;
@@ -123,6 +133,40 @@ export function ProductSlide({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, togglePause]);
 
+  // סטטוס מלאי
+  const isCritical = Boolean(currentItem?.isCritical);
+  const isWarning = Boolean(currentItem?.isWarning);
+  const isShortage =
+    Boolean(isCritical) ||
+    Boolean(isWarning) ||
+    (currentItem?.deficitToRefill ?? 0) > 0 ||
+    (currentItem?.effectiveBalance ?? 0) <= (currentItem?.safetyThreshold ?? 0);
+
+  const shortagePosterUrl = useMemo(() => {
+    if (!currentItem) return "";
+    return generateShortagePosterSvg({
+      sku: currentItem.sku,
+      name: currentItem.cleanName,
+      category: currentItem.category,
+      deficit: currentItem.deficitToRefill,
+      unit: currentItem.unit,
+      safetyThreshold: currentItem.safetyThreshold,
+      effectiveBalance: currentItem.effectiveBalance,
+      isCritical: currentItem.isCritical,
+    });
+  }, [currentItem]);
+
+  const effectiveImageUrl = useMemo(() => {
+    if (!currentItem) return "";
+    if (currentItem.imageUrl && !imageErrorMap[currentItem.sku]) {
+      return currentItem.imageUrl;
+    }
+    if (isShortage && shortagePosterUrl) {
+      return shortagePosterUrl;
+    }
+    return currentItem.imageUrl || "";
+  }, [currentItem, imageErrorMap, isShortage, shortagePosterUrl]);
+
   if (!currentItem) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center p-12 text-center text-muted-foreground">
@@ -134,10 +178,6 @@ export function ProductSlide({
       </div>
     );
   }
-
-  // סטטוס מלאי
-  const isCritical = currentItem.isCritical;
-  const isWarning = currentItem.isWarning;
 
   const statusBadgeColor = isCritical
     ? "bg-rose-500/20 text-rose-400 border-rose-500/50"
@@ -272,10 +312,17 @@ export function ProductSlide({
           >
             {/* עמודה ימנית: כרטיס תמונה חזותי ופרטי אריזה */}
             <div className="lg:col-span-5 flex flex-col gap-4">
-              <div className="group relative overflow-hidden rounded-3xl border border-border/80 bg-card/50 shadow-xl aspect-video lg:aspect-[4/3] flex items-center justify-center">
-                {!hasImageFailed && currentItem.imageUrl ? (
+              <div
+                className={cn(
+                  "group relative overflow-hidden rounded-3xl border shadow-xl aspect-video lg:aspect-[4/3] flex items-center justify-center transition-all",
+                  isShortage
+                    ? "border-rose-500/70 bg-rose-950/20 shadow-rose-950/50 ring-2 ring-rose-500/30"
+                    : "border-border/80 bg-card/50",
+                )}
+              >
+                {effectiveImageUrl ? (
                   <img
-                    src={currentItem.imageUrl}
+                    src={effectiveImageUrl}
                     alt={currentItem.cleanName}
                     onError={() =>
                       setImageErrorMap((prev) => ({ ...prev, [currentItem.sku]: true }))
@@ -295,12 +342,21 @@ export function ProductSlide({
                     <span className="text-[11px] opacity-60">חומרי בניין ח. סבן</span>
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent pointer-events-none" />
 
-                {/* תגית מק"ט צפה */}
-                <div className="absolute top-4 right-4 flex items-center gap-2 rounded-2xl border border-white/20 bg-black/65 px-3.5 py-1.5 text-xs font-black text-white backdrop-blur-md shadow-lg">
-                  <Package className="size-4 text-primary" />
-                  <span>מק״ט: {currentItem.sku}</span>
+                {/* תגיות כותרת עליונות: התראת חוסר ומק״ט מוגדל מעוצב */}
+                <div className="absolute top-4 right-4 left-4 flex items-center justify-between gap-2 pointer-events-none z-10">
+                  <div className="flex items-center gap-2 rounded-2xl border-2 border-primary/80 bg-black/80 px-4 py-1.5 text-xs sm:text-sm font-mono font-black text-primary backdrop-blur-md shadow-lg">
+                    <Package className="size-4.5 text-primary" />
+                    <span>מק״ט: {currentItem.sku}</span>
+                  </div>
+
+                  {isShortage && (
+                    <div className="flex items-center gap-1.5 rounded-2xl border-2 border-rose-500/90 bg-rose-950/90 px-3.5 py-1.5 text-xs sm:text-sm font-black text-rose-300 backdrop-blur-md shadow-lg animate-pulse">
+                      <AlertTriangle className="size-4 text-rose-400" />
+                      <span>חוסר רצפה!</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* תגית אריזה וסטטוס בתחתית התמונה */}
@@ -356,7 +412,7 @@ export function ProductSlide({
             {/* עמודה שמאלית: מדדי משיכה חיים, פרוגרס בר והמלצות רכש */}
             <div className="lg:col-span-7 flex flex-col gap-6">
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-bold text-muted-foreground">
                     חומרי בניין ח. סבן · מגרש הפצה חי
                   </span>
@@ -364,9 +420,44 @@ export function ProductSlide({
                     {currentItem.warehouseBranch}
                   </span>
                 </div>
-                <h2 className="text-3xl md:text-5xl font-black tracking-tight text-foreground leading-tight">
+
+                {isShortage && (
+                  <div className="flex flex-wrap items-center gap-2.5 mb-3">
+                    <div className="flex items-center gap-2 rounded-2xl bg-rose-500/20 border-2 border-rose-500/60 px-4 py-2 text-rose-300 shadow-lg shadow-rose-950/40">
+                      <AlertTriangle className="size-5 text-rose-400 animate-bounce shrink-0" />
+                      <span className="text-sm sm:text-base font-black tracking-wide">
+                        התראת חוסר רצפה במגרש — נדרש רכש מיידי!
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl bg-card border-2 border-primary/70 px-4 py-1.5 text-base sm:text-lg font-mono font-black text-primary shadow-sm">
+                      <Package className="size-5 text-primary" />
+                      <span>מק״ט: {currentItem.sku}</span>
+                    </div>
+                  </div>
+                )}
+
+                <h2
+                  className={cn(
+                    "font-black tracking-tight leading-[1.1] transition-all",
+                    isShortage
+                      ? "text-4xl sm:text-5xl lg:text-6xl text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]"
+                      : "text-3xl md:text-5xl text-foreground",
+                  )}
+                >
                   {currentItem.cleanName}
                 </h2>
+
+                {isShortage && currentItem.deficitToRefill > 0 && (
+                  <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-rose-950/70 to-rose-900/40 border border-rose-500/50 px-4 py-2 text-rose-200">
+                    <span className="text-xs sm:text-sm font-bold">חוסר קריטי להשלמה למגרש:</span>
+                    <span className="text-base sm:text-lg font-black text-white tabular-nums">
+                      {currentItem.deficitToRefill.toLocaleString()} {currentItem.unit}
+                    </span>
+                    <span className="text-xs bg-rose-500/30 text-rose-200 px-2 py-0.5 rounded-lg font-black">
+                      ~{currentItem.palletsToRefill} משטחים
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* גריד מדדי משיכה מרכזיים */}

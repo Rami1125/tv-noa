@@ -3,6 +3,7 @@ import React, {
   useMemo,
   useEffect,
   useCallback,
+  useRef,
   Component,
   ErrorInfo,
   ReactNode,
@@ -242,6 +243,7 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     sumsumSmallPallets: 0,
   });
 
+  const dismissedRef = useRef<Set<string>>(getDismissedSumsumAlerts());
   const [dismissedAlertOrderIds, setDismissedAlertOrderIds] = useState<Set<string>>(() =>
     getDismissedSumsumAlerts(),
   );
@@ -252,15 +254,37 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     sumsumCount: number;
   } | null>(null);
 
-  const handleDismissAlert = useCallback((orderId: string) => {
+  const handleDismissAlert = useCallback(
+    (orderId?: string) => {
+      const idToDismiss = String(orderId || activeAlert?.orderId || "all");
+      dismissedRef.current.add(idToDismiss);
+      setDismissedAlertOrderIds((prev) => {
+        const next = new Set(prev);
+        next.add(idToDismiss);
+        saveDismissedSumsumAlerts(next);
+        return next;
+      });
+      setActiveAlert(null);
+    },
+    [activeAlert?.orderId],
+  );
+
+  const handleDismissAllAlerts = useCallback(() => {
+    safePublished.forEach((o) => {
+      const oId = String(o.orderId || "");
+      if (oId) dismissedRef.current.add(oId);
+    });
     setDismissedAlertOrderIds((prev) => {
       const next = new Set(prev);
-      next.add(String(orderId));
+      safePublished.forEach((o) => {
+        const oId = String(o.orderId || "");
+        if (oId) next.add(oId);
+      });
       saveDismissedSumsumAlerts(next);
       return next;
     });
     setActiveAlert(null);
-  }, []);
+  }, [safePublished]);
 
   const handleAddBalesToDraft = useCallback(
     (orderId: string, count: number) => {
@@ -332,7 +356,8 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     for (const order of safePublished) {
       if (!warehouseMatchesProfile(order.warehouse, selectedProfile)) continue;
       const orderId = String(order.orderId || "");
-      if (!orderId || dismissedAlertOrderIds.has(orderId)) continue;
+      if (!orderId || dismissedRef.current.has(orderId) || dismissedAlertOrderIds.has(orderId))
+        continue;
 
       const rawSummary =
         (order.items || []).map((i) => i.name).join(" ") + " " + (order.customerName || "");
@@ -637,6 +662,13 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                     className="w-full h-10 rounded-xl bg-white/15 text-white font-bold text-xs hover:bg-white/20 active:scale-95 transition"
                   >
                     התעלם וסגור
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissAllAlerts}
+                    className="w-full h-8 text-[11px] text-rose-300/80 hover:text-white underline underline-offset-2 transition"
+                  >
+                    השתק את כל התראות העומס להיום
                   </button>
                 </div>
               </motion.div>
