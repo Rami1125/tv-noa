@@ -82,28 +82,34 @@ export function DeliveredOrdersPanel({
             {/* Dedicated Voice Mute Button */}
             <button
               type="button"
-              onClick={onToggleVoice}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleVoice();
+              }}
               className={cn(
-                "flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-black transition-all shadow-sm ring-1",
+                "flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-black transition-all shadow-sm ring-1 cursor-pointer select-none relative z-20 active:scale-95",
                 isVoiceAnnounceEnabled
-                  ? "bg-purple-600 text-white ring-purple-500 hover:bg-purple-700"
-                  : "bg-rose-500/15 text-rose-500 ring-rose-500/30 hover:bg-rose-500/25",
+                  ? "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30 hover:bg-emerald-500/25"
+                  : "bg-rose-500/15 text-rose-400 ring-rose-500/30 hover:bg-rose-500/25",
               )}
               title={
                 isVoiceAnnounceEnabled
-                  ? "חיווי קולי פעיל · לחץ להשתקה מלאה של הקריינות"
-                  : "חיווי קולי מושתק · לחץ להפעלת הקריינות"
+                  ? "רמקול פעיל · לחץ להשתקה מלאה"
+                  : "רמקול מושתק · לחץ להפעלת קול וצלילים"
               }
             >
               {isVoiceAnnounceEnabled ? (
                 <>
-                  <Volume2 className={cn("size-3.5", isVoiceSpeaking && "animate-bounce")} />
-                  <span className="hidden sm:inline">קול פעיל</span>
+                  <Volume2
+                    className={cn("size-3.5", isVoiceSpeaking && "animate-bounce text-fuchsia-400")}
+                  />
+                  <span className="hidden sm:inline font-bold">רמקול פעיל</span>
                 </>
               ) : (
                 <>
-                  <VolumeX className="size-3.5" />
-                  <span className="hidden sm:inline">קול מושתק</span>
+                  <VolumeX className="size-3.5 text-rose-400" />
+                  <span className="hidden sm:inline font-bold">רמקול מושתק</span>
                 </>
               )}
             </button>

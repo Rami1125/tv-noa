@@ -50,6 +50,8 @@ import {
   setVoiceAnnounceEnabled,
   subscribeVoiceStatus,
   testVoiceAnnouncement,
+  isVoiceStartupSuppressed,
+  releaseVoiceStartupSuppression,
 } from "@/services/voiceAlertService";
 import {
   initOneSignalClient,
@@ -272,13 +274,16 @@ interface DispatchContextValue extends DispatchState {
   finishPicking: (orderId: string) => void;
   reportPickerOverrun: (orderId: string) => void;
 
-  /* voice synthesis alerts */
+  /* voice synthesis alerts & speaker controls */
   isVoiceAnnounceEnabled: boolean;
   toggleVoiceAnnounce: () => boolean;
   setVoiceAnnounceEnabled: (enabled: boolean) => void;
   isVoiceSpeaking: boolean;
   triggerVoiceTest: () => Promise<void>;
   speakUrgentAlert: (text: string) => Promise<void>;
+  isMuted: boolean;
+  toggleSpeaker: () => boolean;
+  setSpeakerMuted: (muted: boolean) => void;
 
   /* OneSignal push notifications */
   oneSignalStatus: OneSignalStatus;
@@ -406,11 +411,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     setIdleSecondsCount(0);
 
     // Dispatch OneSignal push notification for order update
-    triggerOneSignalNotification(
-      `עדכון הזמנה `,
-      `הזמנה  עודכנה בלוח השיבוץ בזמן אמת`,
-      { orderId: cleanId, type: "order_updated" },
-    );
+    triggerOneSignalNotification(`עדכון הזמנה `, `הזמנה  עודכנה בלוח השיבוץ בזמן אמת`, {
+      orderId: cleanId,
+      type: "order_updated",
+    });
 
     // Schedule cleanup after 8 seconds
     clearTimersRef.current[cleanId] = setTimeout(() => {
@@ -998,6 +1002,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const isDirtyRef = useRef(false);
   isDirtyRef.current = isDirty;
   const failures = useRef(0);
+  const isInitialSyncRef = useRef(true);
 
   /** Announce changes and trigger NoaFlashOverlay on new orders or critical status */
   const announceChanges = useCallback(
@@ -1128,7 +1133,14 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         }
 
         setPublished((prev) => {
-          announceChanges(prev, mergedOrders);
+          if (!isInitialSyncRef.current) {
+            announceChanges(prev, mergedOrders);
+          } else {
+            isInitialSyncRef.current = false;
+            setTimeout(() => {
+              releaseVoiceStartupSuppression();
+            }, 3000);
+          }
           return mergedOrders;
         });
 
@@ -1380,14 +1392,25 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
   /* ---------------- Autonomous Real-Time Inventory Deficit Monitor (No Human Touch) ---------------- */
   const alertedCriticalSkusRef = useRef<Set<string>>(new Set());
+  const isInitialInventoryCheckRef = useRef(true);
   useEffect(() => {
+    if (isInitialInventoryCheckRef.current) {
+      liveInventory.items.forEach((item) => {
+        if (item.isCritical) {
+          alertedCriticalSkusRef.current.add(item.sku);
+        }
+      });
+      isInitialInventoryCheckRef.current = false;
+      return;
+    }
+
     liveInventory.items.forEach((item) => {
       if (item.isCritical && !alertedCriticalSkusRef.current.has(item.sku)) {
         alertedCriticalSkusRef.current.add(item.sku);
         const msg = `🚨 התראת מלאי אוטומטית: יתרת ${item.name} ירדה ל-${item.currentStock} ${item.unit} (סף: ${item.safetyStockLevel}). ${item.recommendedOrder}`;
-        pushAlert(msg, "critical", true);
+        pushAlert(msg, "critical", false);
         playAlarmSound();
-        if (voiceAnnounceEnabled) {
+        if (voiceAnnounceEnabled && !isVoiceStartupSuppressed()) {
           void speakHebrew(`התראת מלאי אוטומטית. יתרת ${item.name} קריטית.`);
         }
       }
@@ -1671,13 +1694,16 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     targetedBriefings,
     generateAIBriefing,
     isGeneratingAI,
-    /* voice synthesis alerts */
+    /* voice synthesis alerts & unified speaker controls */
     isVoiceAnnounceEnabled: voiceAnnounceEnabled,
     toggleVoiceAnnounce,
     setVoiceAnnounceEnabled,
     isVoiceSpeaking: voiceSpeaking,
     triggerVoiceTest: testVoiceAnnouncement,
     speakUrgentAlert: speakHebrew,
+    isMuted: !voiceAnnounceEnabled,
+    toggleSpeaker: toggleVoiceAnnounce,
+    setSpeakerMuted: (muted: boolean) => setVoiceAnnounceEnabled(!muted),
     /* OneSignal push notifications */
     oneSignalStatus,
     requestNotificationPermission: requestOneSignalPushPermission,

@@ -6,8 +6,6 @@ import {
   Cloud,
   CloudOff,
   Compass,
-  Mic,
-  MicOff,
   Monitor,
   Radio,
   RefreshCw,
@@ -18,7 +16,6 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
-import { isAudioMuted, toggleAudioMute, subscribeSoundMute } from "@/utils/soundEffects";
 import { cn } from "@/lib/utils";
 
 function useClock() {
@@ -61,22 +58,18 @@ export function TVHeader({
     setScreensaverActive,
     nearestOrderMinutesRemaining,
     isVoiceAnnounceEnabled,
-    setVoiceAnnounceEnabled,
     toggleVoiceAnnounce,
     isVoiceSpeaking,
     triggerVoiceTest,
-    stopSpeakingVoice,
     oneSignalStatus,
     requestNotificationPermission,
     sendPushAlert,
   } = useDispatchBoard();
   const now = useClock();
-  const [isMuted, setIsMuted] = useState(isAudioMuted());
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-    return subscribeSoundMute((muted) => setIsMuted(muted));
   }, []);
 
   const time = now
@@ -128,51 +121,57 @@ export function TVHeader({
           </button>
         )}
 
-        {/* Voice Speech Synthesis (Noa AI Hebrew Female Voice) */}
-        <div className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/60 p-1">
+        {/* Unified Audio & Voice Speaker Button (כפתור רמקול וחיווי קולי מסונכרן) */}
+        <div className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/60 p-1 shrink-0">
           <button
-            onClick={() => {
-              if (isVoiceAnnounceEnabled) {
-                stopSpeakingVoice();
-                setVoiceAnnounceEnabled(false);
-              } else {
-                setVoiceAnnounceEnabled(true);
-              }
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleVoiceAnnounce();
             }}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-black transition",
+              "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-black transition cursor-pointer select-none relative z-20 active:scale-95 shadow-sm",
               isVoiceSpeaking
                 ? "bg-fuchsia-500/25 text-fuchsia-300 ring-1 ring-fuchsia-400 animate-pulse"
                 : isVoiceAnnounceEnabled
-                  ? "bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
+                  ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25"
                   : "bg-rose-500/15 text-rose-400 ring-1 ring-rose-500/30 hover:bg-rose-500/25",
             )}
             title={
               isVoiceAnnounceEnabled
-                ? "חיווי קולי פעיל · לחץ להשתקה מלאה"
-                : "חיווי קולי מושתק · לחץ להפעלה"
+                ? "רמקול וחיווי קולי פעילים · לחץ להשתקה מלאה של צלילים ודיבור"
+                : "רמקול מושתק · לחץ להפעלת רמקול וצלילים"
             }
           >
             {isVoiceAnnounceEnabled ? (
-              <Mic
-                className={cn("size-3.5", isVoiceSpeaking && "animate-bounce text-fuchsia-400")}
+              <Volume2
+                className={cn(
+                  "size-4 text-emerald-400",
+                  isVoiceSpeaking && "animate-bounce text-fuchsia-400",
+                )}
               />
             ) : (
-              <MicOff className="size-3.5 text-rose-400" />
+              <VolumeX className="size-4 text-rose-400" />
             )}
-            <span className="inline">
+            <span className="inline font-bold">
               {isVoiceSpeaking
                 ? "נועה מדווחת..."
                 : isVoiceAnnounceEnabled
-                  ? "חיווי קולי פעיל"
-                  : "חיווי קולי מושתק"}
+                  ? "רמקול פעיל"
+                  : "רמקול מושתק"}
             </span>
           </button>
           {isVoiceAnnounceEnabled && (
             <button
-              onClick={() => triggerVoiceTest()}
-              className="rounded-lg px-2 py-1 text-[11px] font-bold text-purple-300 transition hover:bg-purple-500/25 hover:text-white"
-              title="השמעת בדיקה של הקריינית בעברית"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void triggerVoiceTest();
+              }}
+              className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-emerald-300 transition hover:bg-emerald-500/20 hover:text-white cursor-pointer active:scale-95 shrink-0"
+              title="בדיקת שמע ורמקול בעברית"
             >
               בדיקה
             </button>
@@ -180,9 +179,12 @@ export function TVHeader({
         </div>
 
         {/* OneSignal Push Notifications */}
-        <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-background/60 p-1">
+        <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-background/60 p-1 shrink-0">
           <button
-            onClick={async () => {
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
               if (oneSignalStatus.permission !== "granted") {
                 await requestNotificationPermission();
               } else {
@@ -194,7 +196,7 @@ export function TVHeader({
               }
             }}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-black transition",
+              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-black transition cursor-pointer select-none active:scale-95",
               oneSignalStatus.permission === "granted"
                 ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/40 hover:bg-amber-500/25"
                 : "bg-muted/40 text-muted-foreground hover:bg-muted/60",
@@ -218,23 +220,6 @@ export function TVHeader({
             </span>
           </button>
         </div>
-
-        {/* Audio & Voice Mute/Unmute toggle */}
-        <button
-          onClick={() => {
-            stopSpeakingVoice();
-            toggleAudioMute();
-          }}
-          className={cn(
-            "grid size-10 place-items-center rounded-xl ring-1 ring-inset transition",
-            isMuted
-              ? "bg-rose-500/10 text-rose-500 ring-rose-500/30 hover:bg-rose-500/20"
-              : "bg-emerald-500/10 text-emerald-600 ring-emerald-500/30 hover:bg-emerald-500/20",
-          )}
-          title={isMuted ? "בטל השתקת צלילים וקריינות קולית" : "השתק צלילים וקריינות קולית"}
-        >
-          {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-        </button>
 
         {/* Screensaver fast switch */}
         <button

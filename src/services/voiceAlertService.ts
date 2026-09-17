@@ -7,7 +7,7 @@
  */
 
 import type { Order, OrderStatus } from "@/types/dispatch";
-import { isAudioMuted, subscribeSoundMute } from "@/utils/soundEffects";
+import { isAudioMuted, setAudioMuted, subscribeSoundMute } from "@/utils/soundEffects";
 import { triggerOneSignalNotification } from "@/services/oneSignalService";
 
 const VOICE_ENABLED_STORAGE_KEY = "saban_voice_alerts_enabled";
@@ -20,6 +20,10 @@ let cachedHebrewVoice: SpeechSynthesisVoice | null = null;
 let isSpeakingState = false;
 const activeUtterances = new Set<SpeechSynthesisUtterance>(); // Prevents Chrome garbage collection bug
 
+// Startup suppression: prevents ANY autonomous speech narration upon loading the interface
+let isStartupSuppressed = true;
+const STARTUP_GRACE_PERIOD_MS = 6000;
+
 // Timestamp deduplication to prevent double-speaking within a short window
 const recentlyAnnouncedMap = new Map<string, number>();
 
@@ -27,10 +31,19 @@ const recentlyAnnouncedMap = new Map<string, number>();
 type VoiceListener = (enabled: boolean, isSpeaking: boolean) => void;
 const voiceListeners = new Set<VoiceListener>();
 
+export function isVoiceStartupSuppressed(): boolean {
+  return isStartupSuppressed;
+}
+
+export function releaseVoiceStartupSuppression(): void {
+  isStartupSuppressed = false;
+}
+
 function notifyVoiceListeners() {
+  const effectiveEnabled = isVoiceAnnounceEnabled();
   voiceListeners.forEach((fn) => {
     try {
-      fn(isVoiceAnnounceEnabledState, isSpeakingState);
+      fn(effectiveEnabled, isSpeakingState);
     } catch {
       /* ignore */
     }
@@ -39,7 +52,7 @@ function notifyVoiceListeners() {
 
 export function subscribeVoiceStatus(listener: VoiceListener): () => void {
   voiceListeners.add(listener);
-  listener(isVoiceAnnounceEnabledState, isSpeakingState);
+  listener(isVoiceAnnounceEnabled(), isSpeakingState);
   return () => {
     voiceListeners.delete(listener);
   };
@@ -47,6 +60,20 @@ export function subscribeVoiceStatus(listener: VoiceListener): () => void {
 
 // Initialize settings from localStorage
 if (typeof window !== "undefined") {
+  // Cancel any lingering browser speech on script evaluation
+  if ("speechSynthesis" in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Auto-release startup suppression after grace window
+  setTimeout(() => {
+    isStartupSuppressed = false;
+  }, STARTUP_GRACE_PERIOD_MS);
+
   try {
     const storedEnabled = localStorage.getItem(VOICE_ENABLED_STORAGE_KEY);
     if (storedEnabled !== null) {
@@ -86,10 +113,13 @@ if (typeof window !== "undefined") {
     };
   }
 
-  // Instantly cancel ongoing voice narration if audio is muted
+  // Synchronize with sound effects mute state in both directions
   subscribeSoundMute((muted) => {
     if (muted) {
       stopSpeaking();
+      isVoiceAnnounceEnabledState = false;
+    } else {
+      isVoiceAnnounceEnabledState = true;
     }
     notifyVoiceListeners();
   });
@@ -200,6 +230,8 @@ export function isVoiceAnnounceEnabled(): boolean {
 
 export function setVoiceAnnounceEnabled(enabled: boolean): void {
   isVoiceAnnounceEnabledState = enabled;
+  // Keep audio effects synchronized in lockstep with voice announcement
+  setAudioMuted(!enabled);
   if (!enabled) {
     stopSpeaking();
   }
@@ -214,7 +246,7 @@ export function setVoiceAnnounceEnabled(enabled: boolean): void {
 }
 
 export function toggleVoiceAnnounce(): boolean {
-  const next = !isVoiceAnnounceEnabledState;
+  const next = !isVoiceAnnounceEnabled();
   setVoiceAnnounceEnabled(next);
   return next;
 }
@@ -258,8 +290,18 @@ export function stopSpeaking(): void {
 /**
  * Low-level speech synthesis invoker with queue and memory management.
  * Dispatches simultaneous OneSignal push notifications in parallel with speech.
+ * isManualOrTest: if true, bypasses startup suppression (for manual user test clicks)
  */
-export function speakHebrew(text: string, title?: string): Promise<void> {
+export function speakHebrew(
+  text: string,
+  title?: string,
+  isManualOrTest: boolean = false,
+): Promise<void> {
+  // Prevent reading voice announcements upon loading the interface
+  if (!isManualOrTest && isStartupSuppressed) {
+    return Promise.resolve();
+  }
+
   // Dispatch OneSignal push notification simultaneously
   try {
     triggerOneSignalNotification(title || "חיווי קולי · ח. סבן נועה AI", text, {
@@ -472,6 +514,11 @@ export async function announceUrgentOrderStatusChange(
 ): Promise<boolean> {
   if (!order || !newStatus) return false;
 
+  // Prevent autonomous voice announcements during interface startup
+  if (isStartupSuppressed) {
+    return false;
+  }
+
   // Only announce if this order is high-priority / urgent
   const isUrgent = isHighPriorityUrgentOrder(order, { newStatus, previousStatus });
   if (!isUrgent) {
@@ -498,7 +545,7 @@ export async function announceUrgentOrderStatusChange(
 
   const script = buildUrgentOrderAnnouncementScript(order, newStatus, previousStatus);
   const title = `עדכון סטטוס · הזמנה #${order.orderId} (${newStatus})`;
-  await speakHebrew(script, title);
+  await speakHebrew(script, title, false);
   return true;
 }
 
@@ -507,6 +554,6 @@ export async function announceUrgentOrderStatusChange(
  */
 export async function testVoiceAnnouncement(): Promise<void> {
   const sampleText =
-    "בדיקת מערכת התראות קוליות נועה איי איי. קריינות קולית והתראות OneSignal פעילות ומסונכרנות בזמן אמת.";
-  await speakHebrew(sampleText, "בדיקת התראה וקול · OneSignal & Noa AI");
+    "בדיקת מערכת התראות קוליות נועה איי איי. קריינות קולית ורמקול פעילים ומסונכרנים כעת.";
+  await speakHebrew(sampleText, "בדיקת רמקול וקול · נועה AI", true);
 }
