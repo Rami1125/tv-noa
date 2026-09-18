@@ -206,6 +206,31 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   const approveAllItems = context?.approveAllItems ?? (() => {});
   const pushAlert = context?.pushAlert ?? (() => {});
 
+  // מנרמל הזמנות ומוודא שאין ערכי null/undefined בשדות המפתח
+  const safePublished = useMemo(() => {
+    const rawList = context?.published;
+    return (Array.isArray(rawList) ? rawList : [])
+      .filter((o): o is Order => !!o)
+      .map((o) => ({
+        ...o,
+        warehouse: o.warehouse || "סניף 4 החרש",
+        customerName: o.customerName || "לקוח",
+        city: o.city || "",
+        status: o.status || "ממתין",
+        items: Array.isArray(o.items) ? o.items : [],
+      }));
+  }, [context?.published]);
+
+  const warehouseMatchesProfile = (warehouse: string | undefined, profile: PickerProfile) => {
+    const value = String(warehouse || "")
+      .trim()
+      .toLowerCase();
+    if (!value) return true;
+    if (profile === "oren") return /סניף\s*4|מחסן\s*4|החורש|החרש/.test(value);
+    if (profile === "tamir") return /סניף\s*1|מחסן\s*1|התלמיד/.test(value);
+    return true;
+  };
+
   const [selectedProfile, setSelectedProfile] = useState<PickerProfile>("oren");
   const [activeTab, setActiveTab] = useState<MobileTab>("picking");
   const { theme, toggleTheme } = useTheme();
@@ -325,30 +350,6 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   const toggleExpand = (orderId: string) => {
     setExpandedOrderIds((prev) => ({ ...prev, [orderId]: !prev[orderId] }));
   };
-
-  const warehouseMatchesProfile = (warehouse: string | undefined, profile: PickerProfile) => {
-    const value = String(warehouse || "")
-      .trim()
-      .toLowerCase();
-    if (!value) return true;
-    if (profile === "oren") return /סניף\s*4|מחסן\s*4|החורש|החרש/.test(value);
-    if (profile === "tamir") return /סניף\s*1|מחסן\s*1|התלמיד/.test(value);
-    return true;
-  };
-
-  // מנרמל הזמנות ומוודא שאין ערכי null/undefined בשדות המפתח
-  const safePublished = useMemo(() => {
-    return (Array.isArray(published) ? published : [])
-      .filter((o): o is Order => !!o)
-      .map((o) => ({
-        ...o,
-        warehouse: o.warehouse || "סניף 4 החרש",
-        customerName: o.customerName || "לקוח",
-        city: o.city || "",
-        status: o.status || "ממתין",
-        items: Array.isArray(o.items) ? o.items : [],
-      }));
-  }, [published]);
 
   useEffect(() => {
     if (activeAlert) return;

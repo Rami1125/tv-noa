@@ -238,7 +238,7 @@ function LiveBoard() {
               isVoiceAnnounceEnabled={isVoiceAnnounceEnabled}
               onToggleVoice={() => {
                 if (isVoiceAnnounceEnabled) {
-                  stopSpeakingVoice();
+                  stopSpeakingVoice?.();
                   setVoiceAnnounceEnabled(false);
                 } else {
                   setVoiceAnnounceEnabled(true);

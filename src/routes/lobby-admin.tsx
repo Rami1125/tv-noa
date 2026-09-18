@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LobbyAdminView } from "@/components/lobby/LobbyAdminView";
+import { DispatchProvider } from "@/context/DispatchContext";
 
 export const Route = createFileRoute("/lobby-admin")({
   head: () => ({
@@ -16,5 +17,9 @@ export const Route = createFileRoute("/lobby-admin")({
 });
 
 function LobbyAdminRoute() {
-  return <LobbyAdminView />;
+  return (
+    <DispatchProvider>
+      <LobbyAdminView />
+    </DispatchProvider>
+  );
 }

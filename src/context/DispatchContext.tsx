@@ -52,6 +52,7 @@ import {
   testVoiceAnnouncement,
   isVoiceStartupSuppressed,
   releaseVoiceStartupSuppression,
+  stopSpeaking,
 } from "@/services/voiceAlertService";
 import {
   initOneSignalClient,
@@ -279,6 +280,7 @@ interface DispatchContextValue extends DispatchState {
   toggleVoiceAnnounce: () => boolean;
   setVoiceAnnounceEnabled: (enabled: boolean) => void;
   isVoiceSpeaking: boolean;
+  stopSpeakingVoice: () => void;
   triggerVoiceTest: () => Promise<void>;
   speakUrgentAlert: (text: string) => Promise<void>;
   isMuted: boolean;
@@ -291,7 +293,118 @@ interface DispatchContextValue extends DispatchState {
   sendPushAlert: (title: string, message: string, data?: Record<string, unknown>) => void;
 }
 
-const DispatchContext = createContext<DispatchContextValue | null>(null);
+export const DispatchContext = createContext<DispatchContextValue | null>(null);
+
+const FALLBACK_EMPTY_INVENTORY: LiveInventorySummary = {
+  sandBags: 0,
+  sumsumBags: 0,
+  titBags: 0,
+  sandPallets: 0,
+  sumsumPallets: 0,
+  sandSmallPallets: 0,
+  sumsumSmallPallets: 0,
+  cementWhiteBags: 0,
+  cementGreyBags: 0,
+  cementWhitePallets: 0,
+  cementGreyPallets: 0,
+  updatedAt: new Date(0),
+};
+
+const emptyRecord: string[] & Record<string, number> = Object.assign([], {});
+
+const fallbackDispatchContext: DispatchContextValue = {
+  published: [],
+  draft: [],
+  alerts: [],
+  flash: null,
+  sourceMode: "demo",
+  syncStatus: "idle",
+  lastSyncTime: null,
+  sheetUrl: "",
+  webhookUrl: "",
+  pollingSeconds: 60,
+  isDirty: false,
+  latestOrderEvent: null,
+  isStudioOpen: false,
+  openStudio: () => {},
+  closeStudio: () => {},
+  toggleStudio: () => {},
+  selectedOrderId: null,
+  selectOrder: () => {},
+  updateOrder: () => {},
+  updateOrderStatus: () => {},
+  setOrderStatus: () => {},
+  quickUpdateStatus: () => {},
+  clearOrderStatusOverride: () => {},
+  clearAllOrderStatusOverrides: () => {},
+  toggleItemApproval: () => {},
+  approveAllItems: () => {},
+  updateItemQuantity: () => {},
+  publish: () => {},
+  discardDraft: () => {},
+  pushAlert: () => {},
+  dismissFlash: () => {},
+  removeAlert: () => {},
+  setSourceMode: () => {},
+  setSheetUrl: () => {},
+  setWebhookUrl: () => {},
+  setPollingSeconds: () => {},
+  syncNow: async () => {},
+  syncStatusToSheet: async () => false,
+  syncAllStatusesToSheet: async () => {},
+  testSheetWriteConnection: async () => ({ success: true, message: "OK" }),
+  isScreensaverActive: false,
+  setScreensaverActive: () => {},
+  screensaverSettings: DEFAULT_SCREENSAVER_SETTINGS,
+  updateScreensaverSettings: () => {},
+  nearestOrderMinutesRemaining: null,
+  idleSecondsCount: 0,
+  aiTraining: DEFAULT_AI_TRAINING,
+  updateAITraining: () => {},
+  scheduledMessages: [],
+  addScheduledMessage: () => {},
+  toggleScheduledMessage: () => {},
+  deleteScheduledMessage: () => {},
+  targetedBriefings: {
+    forWarehouse: "",
+    forDriver: "",
+    scheduledNotice: "",
+    trafficAdvice: "",
+    updatedAt: "",
+  },
+  generateAIBriefing: async () => {},
+  isGeneratingAI: false,
+  focusOrder: null,
+  counts: { ממתין: 0, בהעמסה: 0, סופק: 0 },
+  currentTime: new Date(),
+  recentlyChangedOrderIds: emptyRecord,
+  recordOrderChange: () => {},
+  liveInventory: FALLBACK_EMPTY_INVENTORY,
+  activeWarehouseFilter: "all",
+  setActiveWarehouseFilter: () => {},
+  startPicking: () => {},
+  finishPicking: () => {},
+  reportPickerOverrun: () => {},
+  isVoiceAnnounceEnabled: false,
+  toggleVoiceAnnounce: () => false,
+  setVoiceAnnounceEnabled: () => {},
+  isVoiceSpeaking: false,
+  stopSpeakingVoice: () => {},
+  triggerVoiceTest: async () => {},
+  speakUrgentAlert: async () => {},
+  isMuted: true,
+  toggleSpeaker: () => false,
+  setSpeakerMuted: () => {},
+  oneSignalStatus: {
+    initialized: false,
+    isSubscribed: false,
+    isSupported: false,
+    permission: "default",
+    error: null,
+  },
+  requestNotificationPermission: async () => false,
+  sendPushAlert: () => {},
+};
 
 const clone = (orders: Order[]): Order[] => JSON.parse(JSON.stringify(orders)) as Order[];
 
@@ -1699,6 +1812,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     toggleVoiceAnnounce,
     setVoiceAnnounceEnabled,
     isVoiceSpeaking: voiceSpeaking,
+    stopSpeakingVoice: stopSpeaking,
     triggerVoiceTest: testVoiceAnnouncement,
     speakUrgentAlert: speakHebrew,
     isMuted: !voiceAnnounceEnabled,
@@ -1713,8 +1827,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   return <DispatchContext.Provider value={value}>{children}</DispatchContext.Provider>;
 }
 
-export function useDispatchBoard() {
+export function useDispatchBoard(): DispatchContextValue {
   const ctx = useContext(DispatchContext);
-  if (!ctx) throw new Error("useDispatchBoard must be used inside DispatchProvider");
+  if (!ctx) return fallbackDispatchContext;
   return ctx;
 }

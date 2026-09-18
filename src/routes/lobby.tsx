@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LobbySignageOrchestrator } from "@/components/lobby/LobbySignageOrchestrator";
+import { DispatchProvider } from "@/context/DispatchContext";
 
 export const Route = createFileRoute("/lobby")({
   head: () => ({
@@ -17,8 +18,10 @@ export const Route = createFileRoute("/lobby")({
 
 function LobbyRoute() {
   return (
-    <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#FDFBF7]">
-      <LobbySignageOrchestrator isStandalone />
-    </div>
+    <DispatchProvider>
+      <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-[#FDFBF7]">
+        <LobbySignageOrchestrator isStandalone />
+      </div>
+    </DispatchProvider>
   );
 }

@@ -11,6 +11,7 @@ import OverridesPage from "@/app/admin/overrides/page";
 import AuditPage from "@/app/admin/audit/page";
 import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
 import { DispatchProvider } from "@/context/DispatchContext";
+import { LobbyAdminView } from "@/components/lobby/LobbyAdminView";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -119,6 +120,15 @@ function AdminRouteComponent() {
     }
     if (currentPath === "/admin/audit") {
       return <AuditPage />;
+    }
+    if (currentPath === "/lobby-admin" || currentPath === "/admin/lobby-admin") {
+      return (
+        <DispatchProvider>
+          <div className="p-1">
+            <LobbyAdminView />
+          </div>
+        </DispatchProvider>
+      );
     }
     return <AdminDashboardPage onNavigate={handleNavigate} />;
   };

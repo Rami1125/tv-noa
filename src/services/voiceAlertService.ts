@@ -287,6 +287,8 @@ export function stopSpeaking(): void {
   notifyVoiceListeners();
 }
 
+export const stopSpeakingVoice = stopSpeaking;
+
 /**
  * Low-level speech synthesis invoker with queue and memory management.
  * Dispatches simultaneous OneSignal push notifications in parallel with speech.

@@ -295,6 +295,7 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
         {/* Real-time countdown / elapsed display */}
         {order.status !== "סופק" && (
           <span
+            suppressHydrationWarning
             className={cn(
               "rounded-md px-2 py-0.5 text-xs font-black tabular-nums",
               diffMinutes <= 0
