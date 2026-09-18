@@ -15,6 +15,7 @@ import {
   Warehouse,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Volume2,
   VolumeX,
   Smartphone,
@@ -25,6 +26,7 @@ import {
   Square,
   Truck,
   MapPin,
+  Navigation,
   Flame,
   ChevronDown,
   ChevronUp,
@@ -43,6 +45,7 @@ import {
   Plus,
   Minus,
   Bell,
+  RotateCcw,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
@@ -84,6 +87,7 @@ class SafeBoundary extends Component<
 
 export type PickerProfile = "oren" | "tamir" | "all";
 type MobileTab = "picking" | "ready" | "inventory" | "truck_builder";
+export type OrderSubFilter = "all" | "picking" | "ready" | "in_transit" | "delivered";
 
 interface PickerViewProps {
   onSwitchToTv?: () => void;
@@ -233,6 +237,7 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
 
   const [selectedProfile, setSelectedProfile] = useState<PickerProfile>("oren");
   const [activeTab, setActiveTab] = useState<MobileTab>("picking");
+  const [statusFilter, setStatusFilter] = useState<OrderSubFilter>("all");
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -377,20 +382,57 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     }
   }, [safePublished, selectedProfile, activeAlert, dismissedAlertOrderIds]);
 
+  const countsByStatus = useMemo(() => {
+    let all = 0;
+    let picking = 0;
+    let ready = 0;
+    let inTransit = 0;
+    let delivered = 0;
+    safePublished.forEach((o) => {
+      if (!warehouseMatchesProfile(o.warehouse, selectedProfile)) return;
+      all++;
+      if (o.status === "ממתין" || o.status === "בהכנה") picking++;
+      else if (o.status === "מוכן להעמסה" || o.status === "בהעמסה") ready++;
+      else if (o.status === "יצא לדרך") inTransit++;
+      else if (o.status === "סופק") delivered++;
+    });
+    return { all, picking, ready, inTransit, delivered };
+  }, [safePublished, selectedProfile]);
+
   const filteredOrders = useMemo(() => {
     return safePublished.filter((order) => {
       if (!warehouseMatchesProfile(order.warehouse, selectedProfile)) return false;
 
+      // Status filtering based on activeTab and statusFilter
       if (activeTab === "picking") {
-        if (
-          order.status === "סופק" ||
-          order.status === "יצא לדרך" ||
-          order.status === "מוכן להעמסה" ||
-          order.status === "בהעמסה"
-        )
-          return false;
+        if (statusFilter === "all") {
+          // Default view: show active waiting or in preparation
+          if (
+            order.status === "סופק" ||
+            order.status === "יצא לדרך" ||
+            order.status === "מוכן להעמסה" ||
+            order.status === "בהעמסה"
+          )
+            return false;
+        } else if (statusFilter === "picking") {
+          if (order.status !== "ממתין" && order.status !== "בהכנה") return false;
+        } else if (statusFilter === "ready") {
+          if (order.status !== "מוכן להעמסה" && order.status !== "בהעמסה") return false;
+        } else if (statusFilter === "in_transit") {
+          if (order.status !== "יצא לדרך") return false;
+        } else if (statusFilter === "delivered") {
+          if (order.status !== "סופק") return false;
+        }
       } else if (activeTab === "ready") {
-        if (order.status !== "מוכן להעמסה" && order.status !== "בהעמסה") return false;
+        if (statusFilter === "all" || statusFilter === "ready") {
+          if (order.status !== "מוכן להעמסה" && order.status !== "בהעמסה") return false;
+        } else if (statusFilter === "in_transit") {
+          if (order.status !== "יצא לדרך") return false;
+        } else if (statusFilter === "delivered") {
+          if (order.status !== "סופק") return false;
+        } else if (statusFilter === "picking") {
+          if (order.status !== "ממתין" && order.status !== "בהכנה") return false;
+        }
       }
 
       if (searchQuery.trim()) {
@@ -406,18 +448,14 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
 
       return true;
     });
-  }, [safePublished, selectedProfile, activeTab, searchQuery]);
+  }, [safePublished, selectedProfile, activeTab, statusFilter, searchQuery]);
 
   const tabCounts = useMemo(() => {
-    let active = 0;
-    let ready = 0;
-    safePublished.forEach((o) => {
-      if (!warehouseMatchesProfile(o.warehouse, selectedProfile)) return;
-      if (o.status === "ממתין" || o.status === "בהכנה") active++;
-      else if (o.status === "מוכן להעמסה" || o.status === "בהעמסה") ready++;
-    });
-    return { active, ready };
-  }, [safePublished, selectedProfile]);
+    return {
+      active: countsByStatus.picking,
+      ready: countsByStatus.ready + countsByStatus.inTransit,
+    };
+  }, [countsByStatus]);
 
   const totalDraftBags = truckDraft.sandBags + truckDraft.sumsumBags + truckDraft.titBags;
   const totalSmallPallets = truckDraft.sandSmallPallets + truckDraft.sumsumSmallPallets;
@@ -456,37 +494,40 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
     <SafeBoundary>
       <div
         dir="rtl"
-        className="min-h-screen overflow-x-hidden bg-background text-foreground font-sans pb-28 select-none"
+        className="min-h-screen overflow-x-hidden bg-background text-foreground font-sans pb-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] select-none"
       >
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-3.5 pt-2.5 pb-2 shadow-sm">
+        <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-3 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top,0px))] pb-2 shadow-sm">
           <div className="flex items-center justify-between gap-2 max-w-2xl mx-auto">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="size-10 rounded-xl bg-gradient-to-tr from-sky-600 to-amber-500 p-0.5 shadow-sm shrink-0">
+              <div className="size-9 sm:size-10 rounded-xl bg-gradient-to-tr from-sky-600 to-amber-500 p-0.5 shadow-sm shrink-0">
                 <div className="w-full h-full bg-card rounded-[10px] flex items-center justify-center">
-                  <PackageCheck className="size-5 text-amber-500" />
+                  <PackageCheck className="size-4 sm:size-5 text-amber-500" />
                 </div>
               </div>
               <div className="truncate">
                 <h1 className="text-sm sm:text-base font-black tracking-tight text-foreground leading-tight truncate">
                   ח. סבן · מסוף ליקוט
                 </h1>
-                <p className="text-[10px] text-muted-foreground font-medium">סנכרון רצפת מגרש חי</p>
+                <p className="text-[10px] text-muted-foreground font-medium truncate">
+                  סנכרון רצפת מגרש חי
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="flex h-10 px-2.5 items-center gap-1.5 rounded-xl border border-border bg-card text-foreground transition active:scale-95 shadow-sm hover:bg-secondary font-black text-xs"
+                className="size-9 sm:size-10 rounded-xl border border-border bg-card text-foreground transition active:scale-95 shadow-sm hover:bg-secondary flex items-center justify-center"
+                title={theme === "dark" ? "מעבר למצב יום" : "מעבר למצב לילה"}
+                aria-label="החלף מצב תצוגה"
               >
                 {theme === "dark" ? (
                   <Sun className="size-4 text-amber-400" />
                 ) : (
-                  <Moon className="size-4 text-slate-700" />
+                  <Moon className="size-4 text-slate-700 dark:text-slate-200" />
                 )}
-                <span>{theme === "dark" ? "יום" : "לילה"}</span>
               </button>
 
               <button
@@ -499,11 +540,13 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                   }
                 }}
                 className={cn(
-                  "size-10 rounded-xl border transition-all flex items-center justify-center active:scale-95 shadow-sm",
+                  "size-9 sm:size-10 rounded-xl border transition-all flex items-center justify-center active:scale-95 shadow-sm",
                   isMuted
                     ? "bg-rose-500/10 border-rose-500/30 text-rose-500"
                     : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500",
                 )}
+                title={isMuted ? "בטל השתקת צלילים" : "השתק צלילים"}
+                aria-label="שליטה בצלילים"
               >
                 {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
               </button>
@@ -512,7 +555,9 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                 type="button"
                 onClick={() => syncNow()}
                 disabled={syncStatus === "syncing"}
-                className="size-10 rounded-xl bg-card border border-border text-foreground hover:bg-secondary transition-all flex items-center justify-center active:scale-95 shadow-sm"
+                className="size-9 sm:size-10 rounded-xl bg-card border border-border text-foreground hover:bg-secondary transition-all flex items-center justify-center active:scale-95 shadow-sm"
+                title="סנכרן נתונים עכשיו"
+                aria-label="סנכרון נתונים"
               >
                 <RefreshCw
                   className={cn("size-4", syncStatus === "syncing" && "animate-spin text-sky-500")}
@@ -523,7 +568,9 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                 <button
                   type="button"
                   onClick={onOpenTraffic}
-                  className="size-10 rounded-xl bg-card border border-sky-500/40 text-sky-500 hover:bg-sky-500/10 transition-all flex items-center justify-center relative active:scale-95 shadow-sm"
+                  className="size-9 sm:size-10 rounded-xl bg-card border border-sky-500/40 text-sky-500 hover:bg-sky-500/10 transition-all flex items-center justify-center relative active:scale-95 shadow-sm"
+                  title="מפת פקקים חיה ו-Waze"
+                  aria-label="מפת פקקים חיה"
                 >
                   <Compass className="size-4 text-sky-500" />
                   <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 animate-ping" />
@@ -534,9 +581,10 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                 <button
                   type="button"
                   onClick={onSwitchToTv}
-                  className="h-10 px-2 rounded-xl bg-primary/15 border border-primary/30 text-primary text-xs font-bold flex items-center gap-1 active:scale-95 shadow-sm"
+                  className="h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl bg-primary/15 border border-primary/30 text-primary text-xs font-black flex items-center gap-1 active:scale-95 shadow-sm"
+                  title="מעבר לתצוגת טלוויזיה / לוח מסך מלא"
                 >
-                  <Tv className="size-4" />
+                  <Tv className="size-3.5 sm:size-4" />
                   <span>TV</span>
                 </button>
               )}
@@ -933,6 +981,7 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Search input with clear button */}
               <div className="relative">
                 <Search className="size-4 text-muted-foreground absolute right-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -940,17 +989,122 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
                   placeholder="חפש לפי לקוח, עיר, מספר הזמנה או מוצר..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-card border border-border rounded-xl py-2 pr-9 pl-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors shadow-inner"
+                  className="w-full bg-card border border-border rounded-xl py-2.5 pr-9 pl-9 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors shadow-inner"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary active:scale-90 transition-all"
+                    title="נקה חיפוש"
+                    aria-label="נקה חיפוש"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Chips Row - Nothing Hidden */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("picking")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 shrink-0 flex items-center gap-1.5 border",
+                    statusFilter === "picking"
+                      ? "bg-amber-500 text-slate-950 border-amber-500 shadow-sm font-black"
+                      : "bg-card border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>לליקוט</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/10 dark:bg-white/10 font-bold">
+                    {countsByStatus.picking}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("ready")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 shrink-0 flex items-center gap-1.5 border",
+                    statusFilter === "ready"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm font-black"
+                      : "bg-card border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>בהעמסה</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/20 font-bold">
+                    {countsByStatus.ready}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("in_transit")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 shrink-0 flex items-center gap-1.5 border",
+                    statusFilter === "in_transit"
+                      ? "bg-sky-600 text-white border-sky-600 shadow-sm font-black"
+                      : "bg-card border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>בדרך</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/20 font-bold">
+                    {countsByStatus.inTransit}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("delivered")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 shrink-0 flex items-center gap-1.5 border",
+                    statusFilter === "delivered"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm font-black"
+                      : "bg-card border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>סופק</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/20 font-bold">
+                    {countsByStatus.delivered}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 shrink-0 flex items-center gap-1.5 border",
+                    statusFilter === "all"
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm font-black"
+                      : "bg-card border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>הכל</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/20 font-bold">
+                    {countsByStatus.all}
+                  </span>
+                </button>
               </div>
 
               {filteredOrders.length === 0 ? (
                 <div className="bg-card border border-border rounded-2xl p-8 text-center space-y-2 shadow-sm">
                   <PackageCheck className="size-10 text-muted-foreground mx-auto stroke-1" />
-                  <h3 className="text-sm font-bold text-foreground">אין הזמנות בשלב זה</h3>
+                  <h3 className="text-sm font-bold text-foreground">אין הזמנות תואמות לסינון</h3>
                   <p className="text-xs text-muted-foreground">
-                    כל ההזמנות לוקטו או שטרם נפתחו הזמנות חדשות.
+                    {searchQuery
+                      ? `לא נמצאו תוצאות עבור "${searchQuery}". נסה חיפוש אחר.`
+                      : "כל ההזמנות בסטטוס זה טופלו או שטרם נפתחו הזמנות חדשות."}
                   </p>
+                  {statusFilter !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("all")}
+                      className="text-primary font-bold text-xs hover:underline mt-2 inline-block"
+                    >
+                      הצג את כל ההזמנות ({countsByStatus.all})
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -982,22 +1136,26 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
         </main>
 
         {/* Bottom Navigation Bar */}
-        <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-card/95 backdrop-blur-2xl px-3 py-1.5 shadow-2xl">
+        <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-card/95 backdrop-blur-2xl px-2.5 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] shadow-2xl">
           <div className="grid grid-cols-4 gap-1.5 max-w-md mx-auto">
             <button
-              onClick={() => setActiveTab("picking")}
+              type="button"
+              onClick={() => {
+                setActiveTab("picking");
+                setStatusFilter("picking");
+              }}
               className={cn(
-                "flex flex-col items-center justify-center h-12 rounded-xl transition-all duration-200 relative",
+                "flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all duration-200 relative active:scale-95",
                 activeTab === "picking"
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                  ? "bg-primary text-primary-foreground shadow-md font-black"
+                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground font-bold",
               )}
             >
               <div className="relative">
                 <Clock className="size-4" />
-                {tabCounts.active > 0 && (
+                {countsByStatus.picking > 0 && (
                   <span className="absolute -top-1 -left-2 flex size-3.5 items-center justify-center rounded-full text-[8px] font-black bg-amber-500 text-slate-950">
-                    {tabCounts.active}
+                    {countsByStatus.picking}
                   </span>
                 )}
               </div>
@@ -1005,32 +1163,37 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
             </button>
 
             <button
-              onClick={() => setActiveTab("ready")}
+              type="button"
+              onClick={() => {
+                setActiveTab("ready");
+                setStatusFilter("ready");
+              }}
               className={cn(
-                "flex flex-col items-center justify-center h-12 rounded-xl transition-all duration-200 relative",
+                "flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all duration-200 relative active:scale-95",
                 activeTab === "ready"
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                  ? "bg-primary text-primary-foreground shadow-md font-black"
+                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground font-bold",
               )}
             >
               <div className="relative">
                 <Truck className="size-4" />
-                {tabCounts.ready > 0 && (
+                {countsByStatus.ready + countsByStatus.inTransit > 0 && (
                   <span className="absolute -top-1 -left-2 flex size-3.5 items-center justify-center rounded-full text-[8px] font-black bg-emerald-500 text-white">
-                    {tabCounts.ready}
+                    {countsByStatus.ready + countsByStatus.inTransit}
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-black mt-0.5">בהעמסה</span>
+              <span className="text-[10px] font-black mt-0.5">בהעמסה/בדרך</span>
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("inventory")}
               className={cn(
-                "flex flex-col items-center justify-center h-12 rounded-xl transition-all duration-200 relative",
+                "flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all duration-200 relative active:scale-95",
                 activeTab === "inventory"
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                  ? "bg-primary text-primary-foreground shadow-md font-black"
+                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground font-bold",
               )}
             >
               <Boxes className="size-4" />
@@ -1038,12 +1201,13 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab("truck_builder")}
               className={cn(
-                "flex flex-col items-center justify-center h-12 rounded-xl transition-all duration-200 relative border border-amber-500/30",
+                "flex flex-col items-center justify-center min-h-[48px] py-1 rounded-xl transition-all duration-200 relative border border-amber-500/30 active:scale-95",
                 activeTab === "truck_builder"
                   ? "bg-amber-500 text-slate-950 font-black shadow-md"
-                  : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20",
+                  : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 font-bold",
               )}
             >
               <div className="relative">
@@ -1195,17 +1359,46 @@ function PickerOrderCard({
         </div>
 
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/60">
-          <div className="flex items-center gap-1 truncate">
-            <MapPin className="size-3 text-primary shrink-0" />
+          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+            <MapPin className="size-3.5 text-primary shrink-0" />
             <span className="truncate">
               {order?.address ? `${order.address}, ${order.city}` : order?.city}
             </span>
           </div>
-          <div className="flex items-center gap-1 text-foreground font-bold shrink-0">
-            <Truck className="size-3 text-muted-foreground" />
-            <span>{order?.driver || "טרם שובץ"}</span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {order?.address && (
+              <a
+                href={
+                  order.wazeUrl ||
+                  `https://www.waze.com/ul?q=${encodeURIComponent(`${order.address} ${order.city || ""}`)}&navigate=yes`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-[11px] font-bold hover:bg-sky-500/20 active:scale-95 transition-all"
+                title="נווט עם Waze לכתובת הפריקה"
+              >
+                <Navigation className="size-3 text-sky-500" />
+                <span>Waze</span>
+              </a>
+            )}
+            <div className="flex items-center gap-1 text-foreground font-bold">
+              <Truck className="size-3 text-muted-foreground" />
+              <span>{order?.driver || "טרם שובץ"}</span>
+            </div>
           </div>
         </div>
+
+        {/* Delivery Note if present */}
+        {(order?.deliveryNote || order?.note) && (
+          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-1.5">
+            <AlertCircle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <span className="font-bold">הערת אספקה: </span>
+              <span>{order?.deliveryNote || order?.note}</span>
+            </div>
+          </div>
+        )}
 
         <div className="p-2 rounded-xl bg-secondary/40 border border-border text-[11px] font-bold flex items-center justify-between">
           <span className="text-muted-foreground">פרופיל העמסה:</span>
@@ -1271,11 +1464,11 @@ function PickerOrderCard({
           <button
             type="button"
             onClick={onToggleExpand}
-            className="w-full flex items-center justify-between text-xs text-foreground font-bold py-1 focus:outline-none"
+            className="w-full flex items-center justify-between text-xs text-foreground font-bold min-h-[42px] px-1 py-1 rounded-lg hover:bg-secondary/40 focus:outline-none transition-colors"
           >
             <div className="flex items-center gap-2">
               <span>רשימת מק"טים לליקוט</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] bg-secondary text-muted-foreground">
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-secondary text-muted-foreground font-mono">
                 {approvedCount} / {totalItems} פריטים
               </span>
             </div>
@@ -1300,7 +1493,7 @@ function PickerOrderCard({
                   key={item.sku}
                   onClick={() => onToggleItem(order.orderId, item.sku)}
                   className={cn(
-                    "flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all select-none text-xs border active:scale-[0.99]",
+                    "flex items-center justify-between p-2.5 rounded-xl min-h-[44px] cursor-pointer transition-all select-none text-xs border active:scale-[0.99]",
                     item.isApproved
                       ? "bg-emerald-500/10 border-emerald-500/30 text-muted-foreground"
                       : "bg-card border-border text-foreground shadow-sm",
@@ -1339,7 +1532,7 @@ function PickerOrderCard({
             <button
               type="button"
               onClick={() => onStartPicking(order.orderId, activePicker)}
-              className="w-full h-11 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-1.5"
+              className="w-full h-12 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-sm rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-2"
             >
               <PackageCheck className="size-4" />
               <span>התחל ליקוט במגרש (SLA 20 דק')</span>
@@ -1350,7 +1543,7 @@ function PickerOrderCard({
             <button
               type="button"
               onClick={() => onFinishPicking(order.orderId)}
-              className="w-full h-11 bg-gradient-to-r from-indigo-600 to-sky-600 text-white font-black text-xs rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-1.5"
+              className="w-full h-12 bg-gradient-to-r from-indigo-600 to-sky-600 text-white font-black text-sm rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="size-4" />
               <span>הושלם ליקוט - מוכן ברציף להעמסה</span>
@@ -1362,17 +1555,17 @@ function PickerOrderCard({
               <button
                 type="button"
                 onClick={() => onUpdateStatus(order.orderId, "בהעמסה")}
-                className="h-10 bg-amber-500 text-slate-950 font-black text-xs rounded-xl active:scale-95 transition flex items-center justify-center gap-1 shadow-sm"
+                className="h-11 bg-amber-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl active:scale-95 transition flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <Truck className="size-3.5" />
+                <Truck className="size-4" />
                 <span>בהעמסה</span>
               </button>
               <button
                 type="button"
                 onClick={() => onUpdateStatus(order.orderId, "יצא לדרך")}
-                className="h-10 bg-sky-600 text-white font-black text-xs rounded-xl active:scale-95 transition flex items-center justify-center gap-1 shadow-sm"
+                className="h-11 bg-sky-600 text-white font-black text-xs sm:text-sm rounded-xl active:scale-95 transition flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <Send className="size-3.5" />
+                <Send className="size-4" />
                 <span>יצא לדרך</span>
               </button>
             </div>
@@ -1382,7 +1575,7 @@ function PickerOrderCard({
             <button
               type="button"
               onClick={() => onUpdateStatus(order.orderId, "יצא לדרך")}
-              className="w-full h-11 bg-sky-600 text-white font-black text-xs rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-1.5"
+              className="w-full h-12 bg-sky-600 text-white font-black text-sm rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-2"
             >
               <Truck className="size-4" />
               <span>אישור העמסה מלאה ויציאה לדרך</span>
@@ -1393,11 +1586,29 @@ function PickerOrderCard({
             <button
               type="button"
               onClick={() => onUpdateStatus(order.orderId, "סופק")}
-              className="w-full h-10 bg-emerald-600 text-white font-bold text-xs rounded-xl active:scale-95 transition flex items-center justify-center gap-1.5 shadow-sm"
+              className="w-full h-12 bg-emerald-600 text-white font-black text-sm rounded-xl active:scale-95 transition flex items-center justify-center gap-2 shadow-sm"
             >
               <CheckCircle2 className="size-4" />
-              <span>סמן כסופק</span>
+              <span>סמן כסופק בהצלחה</span>
             </button>
+          )}
+
+          {order?.status === "סופק" && (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="size-4" />
+                <span>ההזמנה סופקה בהצלחה</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUpdateStatus(order.orderId, "יצא לדרך")}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-foreground underline underline-offset-2 active:scale-95 px-2 py-1 rounded hover:bg-secondary"
+                title="החזר סטטוס ל'יצא לדרך'"
+              >
+                <RotateCcw className="size-3" />
+                <span>ביטול סופק</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

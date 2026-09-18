@@ -385,32 +385,34 @@ export function InventoryDemandCard({
 
           {/* Quick Stats Badges */}
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block">הזמנות שיצאו/בטיפול</span>
-              <span className="text-base font-black text-sky-400">{relevantOrders.length}</span>
+            <div className="bg-muted/50 p-2 rounded-xl border border-border">
+              <span className="text-[10px] text-muted-foreground block">הזמנות שיצאו/בטיפול</span>
+              <span className="text-base font-black text-sky-500">{relevantOrders.length}</span>
             </div>
-            <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block">שקי בלה שיצאו</span>
-              <span className="text-base font-black text-amber-400">{totalBagsDispensed}</span>
+            <div className="bg-muted/50 p-2 rounded-xl border border-border">
+              <span className="text-[10px] text-muted-foreground block">שקי בלה שיצאו</span>
+              <span className="text-base font-black text-amber-500">{totalBagsDispensed}</span>
             </div>
-            <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block">משטחי סבן שיצאו</span>
-              <span className="text-base font-black text-emerald-400">{totalPalletsDispensed}</span>
+            <div className="bg-muted/50 p-2 rounded-xl border border-border">
+              <span className="text-[10px] text-muted-foreground block">משטחי סבן שיצאו</span>
+              <span className="text-base font-black text-emerald-500">{totalPalletsDispensed}</span>
             </div>
           </div>
 
           {/* Two-Column Breakdown Table */}
           {aggregatedDemand.length === 0 ? (
-            <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-800 text-center text-xs text-slate-400 space-y-1">
-              <Package className="size-6 mx-auto text-slate-600 mb-1" />
-              <p className="font-bold text-slate-300">אין עדיין תנועות יציאה מהחצר היום למחסן זה</p>
+            <div className="p-4 bg-muted/30 rounded-xl border border-border text-center text-xs text-muted-foreground space-y-1">
+              <Package className="size-6 mx-auto text-muted-foreground/60 mb-1" />
+              <p className="font-bold text-foreground">
+                אין עדיין תנועות יציאה מהחצר היום למחסן זה
+              </p>
               <p className="text-[11px]">
                 ברגע שהזמנות ייכנסו לליקוט או יסופקו, תחושב דרישת רכש חכמה.
               </p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground px-2">
                 <span>פריט / מק"ט שיצא מהחצר</span>
                 <span>המלצת רכש חכמה למחר</span>
               </div>
@@ -422,18 +424,20 @@ export function InventoryDemandCard({
                     className={cn(
                       "rounded-xl p-3 border transition-all flex flex-col gap-2.5 text-xs relative overflow-hidden",
                       item.isLowStock
-                        ? "bg-gradient-to-br from-rose-950/30 via-slate-900 to-slate-950/90 border-rose-500/50 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30"
-                        : "bg-slate-950/80 border-slate-800 hover:border-slate-700",
+                        ? "bg-gradient-to-br from-rose-950/20 via-card to-rose-950/10 border-rose-500/50 shadow-md ring-1 ring-rose-500/30"
+                        : "bg-card border-border hover:border-primary/40",
                     )}
                   >
                     {/* Header Row: Item name, SKU, and Pulsating Low Stock Badge */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-black text-slate-100 text-sm leading-tight">
+                          <span className="font-black text-foreground text-sm leading-tight">
                             {item.name}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-500">#{item.sku}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            #{item.sku}
+                          </span>
                         </div>
                       </div>
 
@@ -498,12 +502,12 @@ export function InventoryDemandCard({
                     </div>
 
                     {/* Bottom Row: AI Burn-Rate Reorder */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
-                      <span className="text-[10px] text-slate-400 truncate flex-1">
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/60">
+                      <span className="text-[10px] text-muted-foreground truncate flex-1">
                         {item.explanation}
                       </span>
-                      <div className="flex items-center gap-1 text-sky-300 font-black shrink-0">
-                        <Sparkles className="size-3 text-amber-400 shrink-0" />
+                      <div className="flex items-center gap-1 text-sky-500 dark:text-sky-300 font-black shrink-0">
+                        <Sparkles className="size-3 text-amber-500 shrink-0" />
                         <span className="font-bold text-xs">{item.recommendedOrder}</span>
                       </div>
                     </div>
@@ -514,11 +518,11 @@ export function InventoryDemandCard({
           )}
 
           {/* Buyer Phone Configuration & WhatsApp Trigger */}
-          <div className="pt-2 border-t border-slate-800 space-y-2.5">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="pt-2 border-t border-border space-y-2.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span>קניין החברה:</span>
-                <strong className="text-white">נתנאל</strong>
+                <strong className="text-foreground">נתנאל</strong>
               </span>
 
               {isEditingPhone ? (
@@ -528,11 +532,11 @@ export function InventoryDemandCard({
                     value={buyerPhone}
                     onChange={(e) => setBuyerPhone(e.target.value)}
                     placeholder="050-0000000"
-                    className="bg-slate-800 text-slate-100 text-xs px-2 py-0.5 rounded border border-slate-700 w-28 focus:outline-none focus:border-sky-500 font-mono"
+                    className="bg-secondary text-foreground text-xs px-2 py-0.5 rounded border border-border w-28 focus:outline-none focus:border-primary font-mono"
                   />
                   <button
                     onClick={() => setIsEditingPhone(false)}
-                    className="text-sky-400 text-[11px] font-bold px-1.5 py-0.5 rounded hover:bg-slate-800"
+                    className="text-primary text-[11px] font-bold px-2 py-0.5 rounded bg-secondary hover:bg-secondary/80"
                   >
                     שמור
                   </button>
@@ -540,10 +544,10 @@ export function InventoryDemandCard({
               ) : (
                 <button
                   onClick={() => setIsEditingPhone(true)}
-                  className="text-sky-400 hover:text-sky-300 font-mono text-[11px] underline underline-offset-2 flex items-center gap-1"
+                  className="text-sky-600 dark:text-sky-400 hover:underline font-mono text-[11px] flex items-center gap-1"
                 >
                   <span>{buyerPhone}</span>
-                  <span className="text-[10px] text-slate-500">(ערוך)</span>
+                  <span className="text-[10px] text-muted-foreground">(ערוך)</span>
                 </button>
               )}
             </div>

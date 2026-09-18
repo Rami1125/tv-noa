@@ -81,24 +81,24 @@ export function TVHeader({
     : "";
 
   return (
-    <header className="flex items-center justify-between gap-6 rounded-2xl border border-border/80 bg-card/80 px-6 py-4 shadow-md backdrop-blur-md">
-      <div className="flex items-center gap-4">
+    <header className="flex flex-wrap xl:flex-nowrap items-center justify-between gap-4 sm:gap-6 rounded-2xl border border-border/80 bg-card/80 p-3 sm:px-6 sm:py-4 shadow-md backdrop-blur-md">
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={openStudio}
           aria-label="פתיחת סטודיו ניהול"
-          className="grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90"
+          className="grid size-11 sm:size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90 shrink-0"
         >
-          <Truck className="size-8" />
+          <Truck className="size-6 sm:size-8" />
         </button>
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-foreground">ח. סבן</h1>
-          <p className="text-sm font-semibold text-muted-foreground">
+          <h1 className="text-xl sm:text-3xl font-black tracking-tight text-foreground">ח. סבן</h1>
+          <p className="text-xs sm:text-sm font-semibold text-muted-foreground">
             לוח סידור והפצה חי · Noa AI Live Dispatch
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto max-w-full py-1">
         <Metric label="ממתין" value={counts["ממתין"]} tone="text-slate-600" />
         {counts["בהכנה"] > 0 && (
           <Metric label="בליקוט" value={counts["בהכנה"]} tone="text-amber-500" />
@@ -109,7 +109,7 @@ export function TVHeader({
         <Metric label="סה״כ" value={published.length} tone="text-foreground" />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         {/* Switch to Picker View Button */}
         {onSwitchToPicker && (
           <button

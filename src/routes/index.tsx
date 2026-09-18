@@ -162,11 +162,22 @@ function LiveBoard() {
 
   if (viewMode === "picker") {
     // ── Hermetic mobile boundary ──────────────────────────────────
-    // Mobile/picker renders ONLY PickerView — no screensaver, no studio
-    // drawer, no flash overlays, no traffic modals, no TV boards.
+    // Mobile/picker renders PickerView with on-demand traffic modal
     return (
       <div dir="rtl" className="min-h-screen bg-slate-950">
-        <PickerView onSwitchToTv={() => handleSetViewMode("tv")} />
+        <PickerView
+          onSwitchToTv={() => handleSetViewMode("tv")}
+          onOpenTraffic={() => setIsTrafficOpen(true)}
+        />
+        <AnimatePresence>
+          {isTrafficOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/85 backdrop-blur-md">
+              <div className="w-full max-w-5xl max-h-[94vh] overflow-hidden rounded-2xl shadow-2xl">
+                <TrafficLiveDashboard onClose={() => setIsTrafficOpen(false)} isModal />
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
