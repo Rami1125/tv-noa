@@ -41,13 +41,16 @@ export function AdaptiveProductSlide({
     return () => clearInterval(interval);
   }, [product.images]);
 
-  const images = product.images && product.images.length > 0 ? product.images : [];
+  const fallbackImage =
+    "https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=1200&q=80";
+  const images = product.images && product.images.length > 0 ? product.images : [fallbackImage];
   const imgCount = images.length;
 
+  const skuSafe = product.sku || "SBN-110";
   const qrLandingUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/product/${encodeURIComponent(product.sku)}`
-      : `/product/${product.sku}`;
+      ? `${window.location.origin}/product/${encodeURIComponent(skuSafe)}`
+      : `/product/${skuSafe}`;
 
   return (
     <div

@@ -12,7 +12,11 @@ import {
   Tv,
 } from "lucide-react";
 import type { StoreProduct, LobbySignageSettings } from "@/types/storeProduct";
-import { getStoreProducts, getLobbySettings } from "@/services/storeProductService";
+import {
+  getStoreProducts,
+  getLobbySettings,
+  SEED_STORE_PRODUCTS,
+} from "@/services/storeProductService";
 import { AdaptiveProductSlide } from "@/components/lobby/AdaptiveProductSlide";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import { OrderCard } from "@/components/tv/OrderCard";
@@ -29,7 +33,9 @@ export function LobbySignageOrchestrator({
   isStandalone = false,
   onOpenSettings,
 }: LobbySignageOrchestratorProps) {
-  const [products, setProducts] = useState<StoreProduct[]>(initialProducts || []);
+  const [products, setProducts] = useState<StoreProduct[]>(
+    initialProducts && initialProducts.length > 0 ? initialProducts : SEED_STORE_PRODUCTS,
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -39,7 +45,7 @@ export function LobbySignageOrchestrator({
 
   // Connection to Dispatch Context
   const dispatchContext = useDispatchBoard();
-  const { published, latestOrderEvent, recentlyChangedOrderIds } = dispatchContext;
+  const { published = [], latestOrderEvent, recentlyChangedOrderIds } = dispatchContext;
 
   // Interruption State: when active, shows dispatch board overlay
   const [isDispatchInterruptActive, setIsDispatchInterruptActive] = useState(false);
@@ -52,31 +58,63 @@ export function LobbySignageOrchestrator({
 
   // Load products from service if not provided
   useEffect(() => {
+    let isMounted = true;
     if (initialProducts && initialProducts.length > 0) return;
     async function load() {
-      const list = await getStoreProducts(false);
-      setProducts(list.filter((p) => p.isActive));
+      try {
+        const list = await getStoreProducts(false);
+        if (isMounted && list && list.length > 0) {
+          const active = list.filter((p) => p.isActive);
+          if (active.length > 0) {
+            setProducts(active);
+          }
+        }
+      } catch (err) {
+        console.warn("[LobbySignageOrchestrator] Error loading products:", err);
+      }
     }
     void load();
+    return () => {
+      isMounted = false;
+    };
   }, [initialProducts]);
 
   // Filter active products
   const activeProducts = useMemo(() => {
-    return products.filter((p) => p.isActive);
+    const active = products.filter((p) => p.isActive);
+    return active.length > 0 ? active : SEED_STORE_PRODUCTS;
   }, [products]);
 
-  const currentProduct = activeProducts[currentIndex] || activeProducts[0];
+  const currentProduct =
+    activeProducts[currentIndex] || activeProducts[0] || SEED_STORE_PRODUCTS[0];
+
+  // Helper to check if an order ID was recently changed
+  const isOrderRecentlyChanged = (orderId: string): boolean => {
+    if (!recentlyChangedOrderIds || !orderId) return false;
+    if (Array.isArray(recentlyChangedOrderIds)) {
+      return recentlyChangedOrderIds.includes(orderId);
+    }
+    return Boolean((recentlyChangedOrderIds as Record<string, number>)[orderId]);
+  };
 
   // ★ LISTEN FOR LIVE DISPATCH ORDER CHANGES & INTERRUPT LOBBY SHOWCASE ★
   useEffect(() => {
     if (!settings.enableDispatchInterrupt) return;
-    if (!latestOrderEvent && recentlyChangedOrderIds.size === 0) return;
 
-    const currentKey = `${latestOrderEvent?.orderId}_${latestOrderEvent?.type}_${Date.now()}`;
-    if (currentKey === lastEventKeyRef.current) return;
+    const changedCount = Array.isArray(recentlyChangedOrderIds)
+      ? recentlyChangedOrderIds.length
+      : Object.keys(recentlyChangedOrderIds || {}).length;
+
+    // Do not interrupt on initial mount or when no events exist
+    if (!latestOrderEvent && changedCount === 0) return;
+
+    const eventId = latestOrderEvent?.orderId || "";
+    const eventType = latestOrderEvent?.type || "";
+    const currentKey = `${eventId}_${eventType}_${changedCount}`;
+    if (!currentKey || currentKey === lastEventKeyRef.current) return;
     lastEventKeyRef.current = currentKey;
 
-    // Trigger immediate interruption for 60 seconds (or configured duration)
+    // Trigger immediate interruption for configured duration
     setIsDispatchInterruptActive(true);
     const duration = settings.dispatchInterruptSeconds || 60;
     setInterruptSecondsRemaining(duration);
@@ -261,7 +299,7 @@ export function LobbySignageOrchestrator({
                   <div
                     key={order.orderId}
                     className={cn(
-                      recentlyChangedOrderIds.has(order.orderId) &&
+                      isOrderRecentlyChanged(order.orderId) &&
                         "ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 rounded-2xl animate-pulse",
                     )}
                   >
